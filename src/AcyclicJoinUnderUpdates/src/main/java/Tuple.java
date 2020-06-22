@@ -10,13 +10,13 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 public class Tuple {
-    private State state;
+    private TupleState state;
     private Map<String, String> entries;
     private final Set<String> columns;
     private final String primaryKeyValue;
 
     public Tuple(final int relationChildCount, final Map<String, String> entries, final String primaryKeyValue) {
-        state = new State(relationChildCount);
+        state = new TupleState(relationChildCount);
         validateEntries(entries);
         this.entries = entries;
         this.columns = ImmutableSet.copyOf(entries.keySet());

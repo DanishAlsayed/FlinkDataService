@@ -2,12 +2,12 @@ package src.main.java;
 
 import java.util.Objects;
 
-public class State {
+public class TupleState {
     private boolean isAlive = false;
     private int stateCount = 0;
     private final int relationChildCount;
 
-    public State(final int relationChildCount) {
+    public TupleState(final int relationChildCount) {
         this.relationChildCount = relationChildCount;
     }
 
@@ -34,7 +34,7 @@ public class State {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        State state = (State) o;
+        TupleState state = (TupleState) o;
         return isAlive == state.isAlive &&
                 stateCount == state.stateCount &&
                 relationChildCount == state.relationChildCount;
