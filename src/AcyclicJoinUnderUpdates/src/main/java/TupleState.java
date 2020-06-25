@@ -8,6 +8,9 @@ public class TupleState {
     private final int relationChildCount;
 
     public TupleState(final int relationChildCount) {
+        if (relationChildCount < 0) {
+            throw new RuntimeException("relationChildCount cannot be less than 0");
+        }
         this.relationChildCount = relationChildCount;
     }
 

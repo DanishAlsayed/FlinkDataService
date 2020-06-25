@@ -1,15 +1,19 @@
 package src.main.java;
 
+import com.google.common.collect.ImmutableSet;
+
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
 public class Relation {
     private final String name;
-    private final Map<String, Tuple> rows;
+    private final Set<String> columnNames;
+    private final Map<String, Tuple> tuples;
     private final String primaryKeyName;
     private Map<String, Relation> parents;
     private Map<String, Relation> children;
@@ -17,31 +21,51 @@ public class Relation {
     private boolean isLeaf;
     private RelationStructure structure;
 
-    public Relation(final String name, final String primaryKeyName, final Tuple tuple,
-                    final Map<String, Relation> parents, Map<String, Relation> children) {
+    /**
+     * Class representing a table. First an empty table should be created, then the tuples and family structure should be populated
+     *
+     * @param name
+     * @param primaryKeyName
+     */
+    public Relation(final String name, final String primaryKeyName, final Set<String> columnNames) {
         if (isEmpty(primaryKeyName) || isEmpty(name)) {
             throw new RuntimeException("Primary key name & relation name cannot be empty or null." +
                     " name = " + (name == null ? "null" : name) + ", primaryKeyName = " + (primaryKeyName == null ? "null" : primaryKeyName));
         }
-        requireNonNull(tuple);
-        structure = populateFamily(parents, children);
+
         this.primaryKeyName = primaryKeyName;
         this.name = name;
-        rows = new HashMap<>();
-        rows.put(tuple.getPrimaryKeyValue(), tuple);
+        tuples = new HashMap<>();
+        this.parents = new HashMap<>();
+        this.children = new HashMap<>();
+        requireNonNull(columnNames);
+        if (columnNames.size() < 1) {
+            throw new RuntimeException("A relation must have at least 1 column. Provided columnNames' size is: " + columnNames.size());
+        }
+        this.columnNames = ImmutableSet.copyOf(columnNames);
     }
 
+    //TODO: ensure that candidate tuple actually belongs to the relation (ensure columns exactly match those of the relation as well as tuple's relation name),
+    // Currently any instance of class Tuple can be inserted in any instance of Relation
     public void insertTuple(final Tuple tuple) {
         requireNonNull(tuple);
-        this.rows.put(tuple.getPrimaryKeyValue(), tuple);
+        this.tuples.put(tuple.getPrimaryKeyValue(), tuple);
     }
 
     public boolean deleteTuple(final String primaryKeyValue) {
         requireNonNull(primaryKeyValue);
-        if (!rows.containsKey(primaryKeyValue)) {
+        if (!tuples.containsKey(primaryKeyValue)) {
             return false;
         }
-        return (rows.remove(primaryKeyValue) != null);
+        return (tuples.remove(primaryKeyValue) != null);
+    }
+
+    public int numberOfChildren() {
+        return children.size();
+    }
+
+    public int numberOfParents() {
+        return parents.size();
     }
 
     public Map<String, Relation> getParents() {
@@ -51,7 +75,7 @@ public class Relation {
     public void setParents(Map<String, Relation> parents) {
         requireNonNull(parents);
         this.parents = parents;
-        structure = populateFamily(parents, this.children);
+        populateFamily(parents, this.children);
     }
 
     public Map<String, Relation> getChildren() {
@@ -61,14 +85,30 @@ public class Relation {
     public void setChildren(Map<String, Relation> children) {
         requireNonNull(children);
         this.children = children;
-        structure = populateFamily(this.parents, children);
+        populateFamily(this.parents, children);
     }
 
     public RelationStructure getStructure() {
         return structure;
     }
 
-    private RelationStructure populateFamily(final Map<String, Relation> parents, final Map<String, Relation> children) {
+    public Set<String> getColumnNames() {
+        return columnNames;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Map<String, Tuple> getTuples() {
+        return tuples;
+    }
+
+    /**
+     * @param parents  null if root
+     * @param children null if leaf
+     */
+    public void populateFamily(final Map<String, Relation> parents, final Map<String, Relation> children) {
         if (parents == null) {
             this.isRoot = true;
             this.parents = null;
@@ -84,7 +124,6 @@ public class Relation {
             this.isLeaf = false;
             this.children = children;
         }
-
-        return RelationStructure.getStructure(isRoot, isLeaf);
+        this.structure = RelationStructure.getStructure(isRoot, isLeaf);
     }
 }
