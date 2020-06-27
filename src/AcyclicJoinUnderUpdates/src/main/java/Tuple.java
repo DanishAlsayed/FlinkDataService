@@ -10,25 +10,25 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 public class Tuple {
-    private TupleState state;
+    TupleState state;
     private Map<String, String> entries;
     private final Set<String> columnNames;
     private final String primaryKeyValue;
     private final String relationName;
-    private final int relationParentCount;
     //TODO: Is there a need to provide number of children and parents of the relation in the constructor? Tuples do not need to know the Relation's family structure.
     // This could lead to discrepancies
+    // consider adding value data type to the tuple
+
     /**
      * A class representing a row in a table(Relation). Note that the table's family structure must be known before creating an object of this class.
      * Based on a hashmap where the key's are the column names and the values are the corresponding values in those columns.
+     *
      * @param relationName
-     * @param relationChildCount
-     * @param relationParentCount
      * @param primaryKeyValue
      * @param entries
      */
-    public Tuple(final String relationName, final int relationChildCount, final int relationParentCount, final String primaryKeyValue, final Map<String, String> entries) {
-        state = new TupleState(relationChildCount);
+    public Tuple(final String relationName, final String primaryKeyValue, final Map<String, String> entries) {
+        state = new TupleState();
         validateEntries(entries);
         this.entries = entries;
         this.columnNames = ImmutableSet.copyOf(entries.keySet());
@@ -38,13 +38,8 @@ public class Tuple {
         if (isEmpty(relationName)) {
             throw new RuntimeException("Relation name cannot be empty or null");
         }
-
-        if (relationParentCount < 0) {
-            throw new RuntimeException("relationParentCount cannot be less than 0");
-        }
         this.primaryKeyValue = primaryKeyValue;
         this.relationName = relationName;
-        this.relationParentCount = relationParentCount;
     }
 
     public void updateEntry(final String columnName, final String value) {
@@ -62,6 +57,10 @@ public class Tuple {
 
     public String getPrimaryKeyValue() {
         return primaryKeyValue;
+    }
+
+    public Map<String, String> getEntries() {
+        return entries;
     }
 
     //TODO: Below implementation allows empty values as the check is only for null, is that okay?
