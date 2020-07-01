@@ -26,7 +26,7 @@ public class Relation {
 
     /**
      * Class representing a table. First an empty table should be created, then the family structure should be populated followed by populating tuples. This order of construction is necessary.
-     * TODO: look up an appropriate construction design pattern that enforces this order and hide the implementation from users.
+     * DAG condition is PK->FK, opposite to the paper, same as the presentation.
      *
      * @param name
      * @param primaryKeyName
@@ -51,23 +51,27 @@ public class Relation {
         index = new Index();
     }
 
-    //TODO: ensure that candidate tuple actually belongs to the relation (ensure columns exactly match those of the relation as well as tuple's relation name),
-    // Currently any instance of class Tuple can be inserted in any instance of Relation
     public boolean insertTuple(Tuple tuple) {
         requireNonNull(tuple);
+        Set<String> tupleColumnNames = tuple.getEntries().keySet();
+        if (tupleColumnNames.size() != columnNames.size() || !tupleColumnNames.containsAll(columnNames)) {
+            throw new RuntimeException("Column names for tuple and relation do not match. Tuple column names: " + tupleColumnNames + ", relation column names: " + columnNames);
+        }
         String pk = tuple.getPrimaryKeyValue();
         log.info("Inserting Tuple with PK=" + pk + " in Relation " + name);
-        if (tuples.containsKey(tuple.getPrimaryKeyValue())) {
+        if (tuples.put(pk, tuple) != null) {
             log.info("Tuple with PK=" + pk + "Already exists.");
             return false;
         }
         tuple.state.setRelationChildCount(children.size());
         index.insertTuple(tuple);
-        if (structure == RelationStructure.LEAF) {
+        if (children.isEmpty()) {
+            log.info("Relation " + name + " has no children, setting tuple " + pk + " alive");
             tuple.state.setAlive();
+        } else {
+            recursiveStatusUpdate(this, tuple, Action.INSERT);
         }
-        bottomUpStatusUpdate(tuple, Action.INSERT);
-        return (tuples.put(pk, tuple) == null);
+        return true;
     }
 
     public boolean deleteTuple(final String primaryKeyValue) {
@@ -78,7 +82,7 @@ public class Relation {
         }
         Tuple tuple = tuples.get(primaryKeyValue);
         index.deleteTuple(tuple);
-        bottomUpStatusUpdate(tuple, Action.DELETE);
+        recursiveStatusUpdate(this, tuple, Action.DELETE);
         return (tuples.remove(primaryKeyValue) != null);
     }
 
@@ -132,18 +136,16 @@ public class Relation {
      */
     public void populateFamily(final Map<String, Relation> parents, final Map<String, Relation> children) {
         boolean isRoot;
-        if (parents == null) {
+        if (parents.isEmpty()) {
             isRoot = true;
-            this.parents = null;
         } else {
             isRoot = false;
             this.parents = parents;
         }
 
         boolean isLeaf;
-        if (children == null) {
+        if (children.isEmpty()) {
             isLeaf = true;
-            this.children = null;
         } else {
             isLeaf = false;
             this.children = children;
@@ -151,13 +153,15 @@ public class Relation {
         structure = RelationStructure.getStructure(isRoot, isLeaf);
     }
 
+    //Note: getters and setters not used in private methods
+
     /**
      * returns null if tuple doesn't exist
      */
     @Nullable
-    private Tuple tupleWithForeignKey(String foreignKey, String value) {
-        List<Tuple> result = index.getTuple(foreignKey, value);
-        int size = result.size();
+    private Tuple tupleWithForeignKey(String foreignKey, String fKvalue) {
+        List<Tuple> result = index.getTuple(foreignKey, fKvalue);
+        int size = (result == null) ? 0 : result.size();
         if (size > 1) {
             throw new RuntimeException(size + " tuples found with foreign key. Should be at most 1");
         }
@@ -165,26 +169,37 @@ public class Relation {
         return size == 0 ? null : result.get(0);
     }
 
-    private void bottomUpStatusUpdate(Tuple tuple, Action action) {
-        parents.forEach((parentName, parent) -> {
-            //Ideally this check should be redundant as parent must contain the PK of this table as an FK, that's why it is its parent.
-            if (!parent.columnNames.contains(primaryKeyName)) {
-                throw new RuntimeException("Parent " + parentName + " of " + name + "doesn't have PK: " + primaryKeyName + " as a foreign key.");
-            }
-            Tuple parentTuple = parent.tupleWithForeignKey(primaryKeyName, tuple.getPrimaryKeyValue());
-            if (parentTuple == null) {
-                return;
-            }
-            if (action == Action.INSERT) {
-                parentTuple.state.incrementState();
-            } else {
-                parentTuple.state.decrementState();
-            }
+    private static void recursiveStatusUpdate(Relation relation, Tuple tuple, Action action) {
+        log.info("Recursively updating " + relation.name + " for tuple " + tuple.getPrimaryKeyValue());
+        Map<String, Relation> children = relation.children;
+        updateChildTupleStatuses(children, relation, tuple, action);
+        children.forEach((childName, child) -> {
+            recursiveStatusUpdate(child, tuple, action);
         });
+
     }
 
-    private void setAllTuplesAlive() {
-        tuples.forEach((k, v) -> v.state.setAlive());
+    private static void updateChildTupleStatuses(Map<String, Relation> children, Relation parent, Tuple tuple, Action action) {
+        children.forEach((childName, child) -> {
+            String primaryKeyValue = tuple.getPrimaryKeyValue();
+            log.info("Iterating over child " + childName + " for recursive update to process tuple with PK=" + primaryKeyValue);
+            //Test only for development purposes. Ideally this check should be redundant as child must contain the PK of this table as an FK, that's why it is its child.
+            String parentPK = parent.primaryKeyName;
+            if (!child.columnNames.contains(parentPK)) {
+                throw new RuntimeException("Child " + childName + " of " + parent.name + " doesn't have PK: " + parentPK + " as a foreign key.");
+            }
+            Tuple childTuple = child.tupleWithForeignKey(parentPK, primaryKeyValue);
+            if (childTuple == null) {
+                log.info("No child tuples found");
+                return;
+            }
+            log.info("Found child tuple with PK=" + childTuple.getPrimaryKeyValue() + " containing FK=" + primaryKeyValue + " for column " + parentPK);
+            if (action == Action.INSERT) {
+                parent.tuples.get(primaryKeyValue).state.incrementState(child.name, primaryKeyValue);
+            } else {
+                parent.tuples.get(primaryKeyValue).state.decrementState(child.name, primaryKeyValue);
+            }
+        });
     }
 
     //TODO: should it be private?
@@ -198,7 +213,7 @@ public class Relation {
         void insertTuple(Tuple tuple) {
             tuple.getEntries().forEach((k, v) -> {
                 Multimap<String, Tuple> entry = index.computeIfAbsent(k, e -> ArrayListMultimap.create());
-                entry.put(v, tuple);
+                entry.put(v.getValue(), tuple);
                 index.put(k, entry);
             });
         }
@@ -209,12 +224,14 @@ public class Relation {
             });
         }
 
+        @Nullable
         List<Tuple> getTuple(String key, String value) {
-            return (List<Tuple>) index.get(key).get(value);
+            Multimap<String, Tuple> values = index.get(key);
+            return (values == null) ? null : (List<Tuple>) values.get(value);
         }
     }
 
-    private static enum Action {
+    private enum Action {
         INSERT,
         DELETE;
     }

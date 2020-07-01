@@ -1,5 +1,6 @@
 package src.main.java;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -11,13 +12,12 @@ import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 public class Tuple {
     TupleState state;
-    private Map<String, String> entries;
+    private Map<String, Entry> entries;
     private final Set<String> columnNames;
     private final String primaryKeyValue;
     private final String relationName;
     //TODO: Is there a need to provide number of children and parents of the relation in the constructor? Tuples do not need to know the Relation's family structure.
     // This could lead to discrepancies
-    // consider adding value data type to the tuple
 
     /**
      * A class representing a row in a table(Relation). Note that the table's family structure must be known before creating an object of this class.
@@ -30,7 +30,7 @@ public class Tuple {
     public Tuple(final String relationName, final String primaryKeyValue, final Map<String, String> entries) {
         state = new TupleState();
         validateEntries(entries);
-        this.entries = entries;
+        populateEntries(entries);
         this.columnNames = ImmutableSet.copyOf(entries.keySet());
         if (isEmpty(primaryKeyValue)) {
             throw new RuntimeException("Primary key value cannot be empty or null");
@@ -48,7 +48,7 @@ public class Tuple {
             throw new RuntimeException("Column must exist in order for its value to be updated. The set of columns is immutable");
         }
         requireNonNull(value);
-        entries.put(columnName, value);
+        entries.put(columnName, new Entry(value));
     }
 
     public boolean isAlive() {
@@ -59,7 +59,7 @@ public class Tuple {
         return primaryKeyValue;
     }
 
-    public Map<String, String> getEntries() {
+    public Map<String, Entry> getEntries() {
         return entries;
     }
 
@@ -77,6 +77,13 @@ public class Tuple {
         return columnNames.contains(columnName);
     }
 
+    private void populateEntries(final Map<String, String> entries) {
+        this.entries = new HashMap<>();
+        entries.forEach((columnName, value) -> {
+            this.entries.put(columnName, new Entry(value));
+        });
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -91,4 +98,47 @@ public class Tuple {
     public int hashCode() {
         return Objects.hash(state, entries, columnNames);
     }
+
+    //TODO: consider adding value data type to the tuple
+    public static class Entry {
+        private String value;
+        private boolean isAlive;
+
+        public Entry(String value) {
+            requireNonNull(value);
+            this.value = value;
+            this.isAlive = false;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+        public boolean isAlive() {
+            return isAlive;
+        }
+
+        public void setAlive(boolean alive) {
+            isAlive = alive;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Entry entry = (Entry) o;
+            return isAlive == entry.isAlive &&
+                    value.equals(entry.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(value, isAlive);
+        }
+    }
+
 }

@@ -1,8 +1,11 @@
 package src.main.java;
 
+import com.sun.istack.internal.logging.Logger;
+
 import java.util.Objects;
 
 public class TupleState {
+    private static Logger log = Logger.getLogger(TupleState.class);
     private boolean isAlive = false;
     private int stateCount = 0;
     private int relationChildCount = -1;
@@ -14,6 +17,7 @@ public class TupleState {
         return isAlive;
     }
 
+    //TODO: This method must be called for a TupleState instance to be functional
     public void setRelationChildCount(int count) {
         if (count < 0) {
             throw new RuntimeException("relationChildCount cannot be less than 0");
@@ -28,24 +32,27 @@ public class TupleState {
         return relationChildCount;
     }
 
-    public void incrementState() {
+    public void incrementState(String relationName, String tuplePKValue) {
         checkRelationChildCount();
         if (stateCount == relationChildCount) {
             throw new RuntimeException("StateCount=relationChildCount=" + stateCount + ". Cannot increment any further.");
         }
         stateCount++;
+        log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + "'s stateCount is updated, stateCount=" + stateCount);
         if (stateCount == relationChildCount) {
             isAlive = true;
+            log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now alive. relationChildCount=" + relationChildCount);
         }
     }
 
-    public void decrementState() {
+    public void decrementState(String relationName, String tuplePKValue) {
         checkRelationChildCount();
         if (stateCount <= 0) {
             throw new RuntimeException("State count is: " + stateCount + ". Cannot be decremented any further.");
         }
         stateCount--;
         isAlive = false;
+        log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now NOT alive. relationChildCount=" + relationChildCount + ", stateCount=" + stateCount);
     }
 
     /**
