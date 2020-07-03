@@ -65,12 +65,7 @@ public class Relation {
         }
         tuple.state.setRelationChildCount(children.size());
         index.insertTuple(tuple);
-        if (children.isEmpty()) {
-            log.info("Relation " + name + " has no children, setting tuple " + pk + " alive");
-            tuple.state.setAlive();
-        } else {
-            recursiveStatusUpdate(this, tuple, Action.INSERT);
-        }
+        recursiveStatusUpdate(this, primaryKeyName, pk, tuple, Action.INSERT);
         return true;
     }
 
@@ -82,7 +77,7 @@ public class Relation {
         }
         Tuple tuple = tuples.get(primaryKeyValue);
         index.deleteTuple(tuple);
-        recursiveStatusUpdate(this, tuple, Action.DELETE);
+        recursiveStatusUpdate(this, primaryKeyName, primaryKeyValue, tuple, Action.DELETE);
         return (tuples.remove(primaryKeyValue) != null);
     }
 
@@ -169,35 +164,134 @@ public class Relation {
         return size == 0 ? null : result.get(0);
     }
 
-    private static void recursiveStatusUpdate(Relation relation, Tuple tuple, Action action) {
-        log.info("Recursively updating " + relation.name + " for tuple " + tuple.getPrimaryKeyValue());
-        Map<String, Relation> children = relation.children;
-        updateChildTupleStatuses(children, relation, tuple, action);
-        children.forEach((childName, child) -> {
-            recursiveStatusUpdate(child, tuple, action);
-        });
+    /**
+     * This is STRICTLY for a relation tree of the structure ROOT -> INTERMEDIATE -> LEAF. Corresponding to lineintem, orders and customer tables only in the TPC-H schema.
+     *
+     * @param relation
+     * @param tuple
+     */
+    private static void tupleStatusUpdates(final Relation relation, Tuple tuple, Action action) {
+        updateSelf(relation, tuple);
 
+        if (relation.structure == RelationStructure.INTERMEDIATE) {
+            updateParent(relation, tuple);
+        } else if (relation.structure == RelationStructure.LEAF) {
+            Relation relation1 = relation;
+            for (int i = 0; i < 2; i++) {
+                relation1 = updateParent(relation1, tuple);
+            }
+        }
     }
 
-    private static void updateChildTupleStatuses(Map<String, Relation> children, Relation parent, Tuple tuple, Action action) {
-        children.forEach((childName, child) -> {
-            String primaryKeyValue = tuple.getPrimaryKeyValue();
-            log.info("Iterating over child " + childName + " for recursive update to process tuple with PK=" + primaryKeyValue);
-            //Test only for development purposes. Ideally this check should be redundant as child must contain the PK of this table as an FK, that's why it is its child.
-            String parentPK = parent.primaryKeyName;
-            if (!child.columnNames.contains(parentPK)) {
-                throw new RuntimeException("Child " + childName + " of " + parent.name + " doesn't have PK: " + parentPK + " as a foreign key.");
+    private static Relation updateParent(final Relation relation, Tuple tuple) {
+        Map<String, Relation> parents = relation.parents;
+        if (parents.size() != 1) {
+            throw new RuntimeException("Expected 1 and only 1 parent for relation " + relation.name + " with structure " + relation.structure);
+        }
+        Relation parent = parents.entrySet().iterator().next().getValue();
+        List<Tuple> tuples = parent.index.getTuple(relation.primaryKeyName, tuple.getPrimaryKeyValue());
+        if (tuples == null || tuples.size() != 1) {
+            throw new RuntimeException("Expecting 1 and only 1 parent tuple from parent " + parent.name);
+        }
+        Tuple parentTuple = tuples.get(0);
+        updateSelf(parent, parentTuple);
+        return parent;
+    }
+
+    private static void updateSelf(final Relation relation, Tuple tuple) {
+        relation.children.forEach((childName, child) -> {
+            String childPK = child.primaryKeyName;
+            String tValue = tuple.getEntries().get(childPK).getValue();
+            List<Tuple> cTuples = child.index.getTuple(childPK, tValue);
+            if (cTuples == null || cTuples.size() != 1) {
+                throw new RuntimeException("Expecting 1 and only 1 corresponding tuple from child " + child.name + " for PK: " + childPK + "=" + tValue);
             }
-            Tuple childTuple = child.tupleWithForeignKey(parentPK, primaryKeyValue);
-            if (childTuple == null) {
-                log.info("No child tuples found");
+            Tuple cTuple = cTuples.get(0);
+            if (cTuple.getPrimaryKeyValue().equals(tValue) && cTuple.isAlive()) {
+                tuple.state.incrementState(relation.name, tuple.getPrimaryKeyValue());
+            }
+        });
+    }
+
+    /**
+     * An attempt at a generic implementation of tupleStatusUpdates(Relation relation, Tuple tuple) above
+     *
+     * @param relation
+     * @param columnName  start with tuple pK
+     * @param columnValue start with tuple pk value
+     * @param tuple
+     * @param action
+     */
+    private static void recursiveStatusUpdate(Relation relation, String columnName, String columnValue, Tuple tuple, Action action) {
+        log.info("Recursively updating " + relation.name + " for tuple " + tuple.getPrimaryKeyValue());
+        updateSelfStatus(relation, tuple, columnName, columnValue);
+        Map<String, Relation> parents = relation.parents;
+        /*if (relation.getStructure() != RelationStructure.LEAF) {
+            updateParentTupleStatuses(parents, relation, columnName, tuple, action);
+        }*/
+        //if (relation.getStructure() != RelationStructure.ROOT) {
+        parents.forEach((parentName, parent) -> {
+            recursiveStatusUpdate(parent, relation.primaryKeyName, columnValue, tuple, action);
+        });
+        //}
+    }
+
+    private static void updateSelfStatus(Relation relation, Tuple initialTuple, String columnName, String columnValue) {
+        if (relation.structure == RelationStructure.LEAF) {
+            log.info("Relation " + relation.name + " has no children, setting initialTuple " + initialTuple.getPrimaryKeyValue() + " alive");
+            initialTuple.state.setAlive();
+        } else {
+            relation.children.forEach((childName, child) -> {
+                String childPk = child.primaryKeyName;
+                List<Tuple> tuples = relation.index.getTuple(columnName, columnValue);
+                int size = (tuples == null) ? 0 : tuples.size();
+                if (size == 0) {
+                    log.info("No tuples found with " + columnName + "=" + columnValue);
+                    return;
+                }
+                if (size > 1) {
+                    throw new RuntimeException(size + " tuples found with foreign key. Should be at most 1");
+                }
+                Tuple tuple = tuples.get(0);
+                String fkValue = tuple.getEntries().get(childPk).getValue();
+                List<Tuple> childTuples = child.index.getTuple(childPk, fkValue);
+                size = (childTuples == null) ? 0 : tuples.size();
+                if (size == 0) {
+                    log.info("No child tuples found with " + columnName + "=" + columnValue);
+                    return;
+                }
+                if (size > 1) {
+                    throw new RuntimeException(size + " child tuples found with foreign key. Should be at most 1");
+                }
+                Tuple childTuple = childTuples.get(0);
+
+                if (childTuple.isAlive()) {
+                    tuple.state.incrementState(relation.name, columnValue);
+                }
+            });
+        }
+    }
+
+    private static void updateParentTupleStatuses(Map<String, Relation> parents, Relation relation, String primaryKey, Tuple tuple, Action action) {
+        parents.forEach((parentName, parent) -> {
+            String primaryKeyValue = tuple.getPrimaryKeyValue();
+            log.info("Iterating over parent " + parentName + " for recursive update to process tuple with PK=" + primaryKeyValue);
+            //Test only for development purposes. Ideally this check should be redundant as parent must contain the PK of this table as an FK, that's why it is its parent.
+            //String primaryKey = relation.primaryKeyName;
+            if (!parent.columnNames.contains(primaryKey)) {
+                log.info("Parent " + parentName + " of " + relation.name + " doesn't have PK: " + primaryKey + " as a foreign key.");
                 return;
             }
-            log.info("Found child tuple with PK=" + childTuple.getPrimaryKeyValue() + " containing FK=" + primaryKeyValue + " for column " + parentPK);
-            if (action == Action.INSERT) {
-                parent.tuples.get(primaryKeyValue).state.incrementState(child.name, primaryKeyValue);
+            Tuple parentTuple = parent.tupleWithForeignKey(primaryKey, primaryKeyValue);
+            if (parentTuple == null) {
+                log.info("No parent tuples found");
+                return;
+            }
+            log.info("Found parent tuple with PK=" + parentTuple.getPrimaryKeyValue() + " containing FK=" + primaryKeyValue + " for column " + primaryKey);
+            if (action == Action.INSERT && parentTuple.isAlive()) {
+                relation.tuples.get(primaryKeyValue).state.incrementState(parent.name, primaryKeyValue);
             } else {
-                parent.tuples.get(primaryKeyValue).state.decrementState(child.name, primaryKeyValue);
+                relation.tuples.get(primaryKeyValue).state.decrementState(parent.name, primaryKeyValue);
             }
         });
     }
