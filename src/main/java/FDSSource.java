@@ -1,27 +1,29 @@
 import com.google.common.collect.ImmutableList;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
+import src.main.java.Relation;
 import src.main.java.Tuple;
 
 import javax.annotation.Nullable;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class FDSSource extends RichSourceFunction<String> {
+public class FDSSource extends RichSourceFunction<Tuple> {
     private volatile boolean run = false;
-    private SourceContext<String> context;
+    private SourceContext<Tuple> context;
     private final List<String> filePaths;
     private transient List<BufferedReader> readers;
+    private final List<Relation> relations;
+    private final char DELIM = '\t';
 
-    public FDSSource(final List<String> filePaths) {
+    public FDSSource(final List<String> filePaths, final List<Relation> relations) {
         super();
         if (filePaths == null || filePaths.isEmpty()) {
             throw new RuntimeException("filePaths cannot be null or empty");
         }
         this.filePaths = ImmutableList.copyOf(filePaths);
+        this.relations = relations;
     }
 
     @Override
@@ -31,25 +33,26 @@ public class FDSSource extends RichSourceFunction<String> {
     }
 
     @Override
-    public void run(SourceContext<String> sourceContext) {
+    public void run(SourceContext<Tuple> sourceContext) {
         this.context = sourceContext;
         readers = makeReaders();
         Set<BufferedReader> closedReaders = new HashSet<>();
+        AtomicInteger counter = new AtomicInteger();
         while (run) {
             readers.forEach(reader -> {
                 try {
                     String line = reader.readLine();
-                    //TODO: this tuple should be added to Tuple3 object, that object should be be added to sourceContext
-                    // lineToTuple will return null if line is null, add it to Tuple3 regardless.
-                    Tuple tuple = lineToTuple(line);
+                    Tuple tuple = lineToTuple(line, counter.get() % filePaths.size());
+                    System.out.println(counter);
                     if (line != null) {
-                        sourceContext.collect(line);
+                        sourceContext.collect(tuple);
                     } else {
                         closedReaders.add(reader);
                         if (closedReaders.size() == filePaths.size()) {
                             cancel();
                         }
                     }
+                    counter.getAndIncrement();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -64,9 +67,33 @@ public class FDSSource extends RichSourceFunction<String> {
     }
 
     @Nullable
-    private Tuple lineToTuple(final String line) {
-        //TODO: In this method: Clean the input and convert to tuple. Return null if line is null
-        return null;
+    private Tuple lineToTuple(final String line, int index) {
+        if (line == null) {
+            return null;
+        }
+        Relation relation = relations.get(index);
+        String[] values = line.split(String.valueOf(DELIM));
+        Map<String, String> entries = makeEntries(relation, values);
+        return new Tuple(relation.getName(), getPrimaryKeyValue(relation, values), entries);
+    }
+
+    private String getPrimaryKeyValue(Relation relation, String[] values) {
+        int pkIndex = relation.getColumnNamesList().indexOf(relation.getPrimaryKeyName());
+        return values[pkIndex];
+    }
+
+    private Map<String, String> makeEntries(Relation relation, String[] values) {
+        Map<String, String> entries = new HashMap<>();
+
+        List<String> columnNames = relation.getColumnNamesList();
+        int count = values.length;
+        if (columnNames.size() != count) {
+            throw new RuntimeException("# of columns for relation " + relation.getName() + " must be equal to the # of values." + count + " != " + columnNames.size());
+        }
+        for (int i = 0; i < count; i++) {
+            entries.put(columnNames.get(i), values[i]);
+        }
+        return entries;
     }
 
     private List<BufferedReader> makeReaders() {

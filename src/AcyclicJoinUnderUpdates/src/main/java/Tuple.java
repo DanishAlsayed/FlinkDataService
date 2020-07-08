@@ -1,5 +1,6 @@
 package src.main.java;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -10,12 +11,12 @@ import com.google.common.collect.ImmutableSet;
 import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
-public class Tuple {
-    TupleState state;
-    private Map<String, Entry> entries;
-    private final Set<String> columnNames;
-    private final String primaryKeyValue;
-    private final String relationName;
+public class Tuple implements Serializable {
+    transient TupleState state;
+    transient private Map<String, Entry> entries;
+    transient private final Set<String> columnNames;
+    transient private final String primaryKeyValue;
+    transient private final String relationName;
     //TODO: Is there a need to provide number of children and parents of the relation in the constructor? Tuples do not need to know the Relation's family structure.
     // This could lead to discrepancies
 
@@ -99,8 +100,20 @@ public class Tuple {
         return Objects.hash(state, entries, columnNames);
     }
 
+    /*@Override
+    public String toString() {
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Entry> entry : entries.entrySet()) {
+            result.append(entry.getKey())
+                    .append("->")
+                    .append(entry.getValue().value)
+                    .append(" ");
+        }
+        return result.toString();
+    }*/
+
     //TODO: consider adding value data type to the tuple
-    public static class Entry {
+    public static class Entry implements Serializable {
         private String value;
         private boolean isAlive;
 

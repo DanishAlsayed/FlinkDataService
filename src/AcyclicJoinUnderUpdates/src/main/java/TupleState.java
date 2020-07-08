@@ -2,9 +2,10 @@ package src.main.java;
 
 import com.sun.istack.internal.logging.Logger;
 
+import java.io.Serializable;
 import java.util.Objects;
 
-public class TupleState {
+public class TupleState implements Serializable {
     private static Logger log = Logger.getLogger(TupleState.class);
     private boolean isAlive = false;
     private int stateCount = 0;

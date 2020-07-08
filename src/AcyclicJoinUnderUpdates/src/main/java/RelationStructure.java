@@ -1,6 +1,8 @@
 package src.main.java;
 
-public enum RelationStructure {
+import java.io.Serializable;
+
+public enum RelationStructure implements Serializable {
     ROOT,
     LEAF,
     ONLY,

@@ -1,6 +1,7 @@
 package src.main.java;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.sun.istack.internal.Nullable;
@@ -8,21 +9,23 @@ import com.sun.istack.internal.logging.Logger;
 
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
+import java.io.Serializable;
 import java.util.*;
 
 import static java.util.Objects.requireNonNull;
 
-public class Relation {
+public class Relation implements Serializable {
     private static Logger log = Logger.getLogger(Relation.class);
     private final String name;
-    private final Set<String> columnNames;
+    private final Set<String> columnNamesSet;
+    private final List<String> columnNamesList;
     private final Map<String, Tuple> tuples;
     private final String primaryKeyName;
     private Map<String, Relation> parents;
     private Map<String, Relation> children;
     private RelationStructure structure;
     private Index index;
-//TODO: consider having a Map of foreign keys, key= FK name & value=Relation
+    //TODO: consider having a Map of foreign keys, key= FK name & value=Relation
 
     /**
      * Class representing a table. First an empty table should be created, then the family structure should be populated followed by populating tuples. This order of construction is necessary.
@@ -31,7 +34,7 @@ public class Relation {
      * @param name
      * @param primaryKeyName
      */
-    public Relation(final String name, final String primaryKeyName, final Set<String> columnNames) {
+    public Relation(final String name, final String primaryKeyName, final List<String> columnNamesList) {
         if (isEmpty(primaryKeyName) || isEmpty(name)) {
             throw new RuntimeException("Primary key name & relation name cannot be empty or null." +
                     " name = " + (name == null ? "null" : name) + ", primaryKeyName = " + (primaryKeyName == null ? "null" : primaryKeyName));
@@ -42,11 +45,15 @@ public class Relation {
         tuples = new HashMap<>();
         parents = new HashMap<>();
         children = new HashMap<>();
-        requireNonNull(columnNames);
-        if (columnNames.size() < 1) {
-            throw new RuntimeException("A relation must have at least 1 column. Provided columnNames' size is: " + columnNames.size());
+        requireNonNull(columnNamesList);
+        if (columnNamesList.size() < 1) {
+            throw new RuntimeException("A relation must have at least 1 column. Provided columnNames' size is: " + columnNamesList.size());
         }
-        this.columnNames = ImmutableSet.copyOf(columnNames);
+        this.columnNamesSet = ImmutableSet.copyOf(columnNamesList);
+        if (this.columnNamesSet.size() != columnNamesList.size()) {
+            throw new RuntimeException("Duplicate column names found: " + columnNamesList);
+        }
+        this.columnNamesList = columnNamesList;
         //TODO: do we need the tuples map if we have index?
         index = new Index();
     }
@@ -54,8 +61,8 @@ public class Relation {
     public boolean insertTuple(Tuple tuple) {
         requireNonNull(tuple);
         Set<String> tupleColumnNames = tuple.getEntries().keySet();
-        if (tupleColumnNames.size() != columnNames.size() || !tupleColumnNames.containsAll(columnNames)) {
-            throw new RuntimeException("Column names for tuple and relation do not match. Tuple column names: " + tupleColumnNames + ", relation column names: " + columnNames);
+        if (tupleColumnNames.size() != columnNamesSet.size() || !tupleColumnNames.containsAll(columnNamesSet)) {
+            throw new RuntimeException("Column names for tuple and relation do not match. Tuple column names: " + tupleColumnNames + ", relation column names: " + columnNamesSet);
         }
         String pk = tuple.getPrimaryKeyValue();
         log.info("Inserting Tuple with PK=" + pk + " in Relation " + name);
@@ -113,12 +120,20 @@ public class Relation {
         return structure;
     }
 
-    public Set<String> getColumnNames() {
-        return columnNames;
+    public Set<String> getColumnNamesSet() {
+        return ImmutableSet.copyOf(columnNamesSet);
+    }
+
+    public List<String> getColumnNamesList() {
+        return ImmutableList.copyOf(columnNamesList);
     }
 
     public String getName() {
         return name;
+    }
+
+    public String getPrimaryKeyName() {
+        return primaryKeyName;
     }
 
     public Map<String, Tuple> getTuples() {
@@ -267,7 +282,7 @@ public class Relation {
         return tuples.get(0);
     }
 
-    private static class Index {
+    private static class Index implements Serializable {
         Map<String, Multimap<String, Tuple>> index;
 
         Index() {

@@ -6,8 +6,10 @@ public class FlinkDataServiceTest {
 
     @Test
     void readFileTest() throws Exception {
-        FlinkDataService fds = new FlinkDataService(asList("/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/TestFile1",
-                "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/TestFile2"));
+        FlinkDataService fds = new FlinkDataService(asList("/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/lineitem_test",
+                "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/orders_test",
+                "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/customer_test"
+        ));
         fds.readFile();
     }
 }

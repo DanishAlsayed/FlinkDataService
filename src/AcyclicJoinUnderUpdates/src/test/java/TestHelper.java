@@ -6,16 +6,16 @@ import src.main.java.Tuple;
 import java.util.*;
 
 import static java.util.Arrays.asList;
-import static java.util.Collections.singleton;
+import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestHelper {
 
     static List<Relation> tpchSchema() {
-        Relation lineItem = new Relation("lineItem", "lineNumber", new HashSet<>(asList("lineNumber", "orderKey")));
-        Relation orders = new Relation("orders", "orderKey", new HashSet<>(asList("orderKey", "customerKey")));
-        Relation customers = new Relation("customers", "customerKey", new HashSet<>(singleton("customerKey")));
+        Relation lineItem = new Relation("lineItem", "lineNumber", asList("lineNumber", "orderKey"));
+        Relation orders = new Relation("orders", "orderKey", asList("orderKey", "customerKey"));
+        Relation customers = new Relation("customers", "customerKey", singletonList("customerKey"));
 
         //Populating structure
         lineItem.setChildren(singletonMap("orders", orders));
