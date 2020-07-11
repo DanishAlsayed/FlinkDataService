@@ -33,6 +33,12 @@ public class FDSSource extends RichSourceFunction<Tuple> {
     }
 
     @Override
+    public void close() throws Exception {
+        closeReaders();
+        super.close();
+    }
+
+    @Override
     public void run(SourceContext<Tuple> sourceContext) {
         this.context = sourceContext;
         readers = makeReaders();
@@ -43,7 +49,6 @@ public class FDSSource extends RichSourceFunction<Tuple> {
                 try {
                     String line = reader.readLine();
                     Tuple tuple = lineToTuple(line, counter.get() % filePaths.size());
-                    System.out.println(counter);
                     if (line != null) {
                         sourceContext.collect(tuple);
                     } else {

@@ -10,6 +10,6 @@ public class FlinkDataServiceTest {
                 "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/orders_test",
                 "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/test/resources/customer_test"
         ));
-        fds.readFile();
+        fds.fds();
     }
 }

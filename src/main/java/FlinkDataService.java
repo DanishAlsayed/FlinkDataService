@@ -16,11 +16,11 @@ public class FlinkDataService {
         this.relations = ImmutableList.copyOf(SchemaBuilder.query3Schema());
     }
 
-    public void readFile() throws Exception {
+    public void fds() throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         DataStream<Tuple> stream = env.addSource(new FDSSource(filePaths, relations));
-        stream.print();
+        stream.process(new TPCHQuery3Process(relations));
         env.execute("FlinkDataService");
     }
 

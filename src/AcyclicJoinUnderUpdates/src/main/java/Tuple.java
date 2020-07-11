@@ -59,6 +59,10 @@ public class Tuple implements Serializable {
         return entries;
     }
 
+    public String getRelationName() {
+        return relationName;
+    }
+
     //TODO: Below implementation allows empty values as the check is only for null, is that okay?
     private static void validateEntries(final Map<String, String> entries) {
         requireNonNull(entries);
