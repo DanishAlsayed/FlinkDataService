@@ -63,7 +63,6 @@ public class FDSSource extends RichSourceFunction<Tuple> {
     @Override
     public void cancel() {
         run = false;
-        closeReaders();
     }
 
     @Nullable
