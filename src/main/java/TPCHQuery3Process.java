@@ -75,10 +75,10 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
     private boolean isValidTuple(Tuple tuple) {
         boolean dateIsValid = true;
         if (tuple.getRelationName().equals("orders")) {
-            dateIsValid = isValidDate(tuple, "orderdate", Operator.LESS_THAN);
+            dateIsValid = isValidDate(tuple, "orderdate", DateOperator.LESS_THAN);
         }
         if (tuple.getRelationName().equals("lineitem")) {
-            dateIsValid = isValidDate(tuple, "shipdate", Operator.GREATER_THAN);
+            dateIsValid = isValidDate(tuple, "shipdate", DateOperator.GREATER_THAN);
         }
 
         boolean validMarketSegment = true;
@@ -88,10 +88,10 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
         return dateIsValid && validMarketSegment;
     }
 
-    private boolean isValidDate(Tuple tuple, String dateColumn, Operator operator) {
+    private boolean isValidDate(Tuple tuple, String dateColumn, DateOperator dateOperator) {
         try {
             Date date = dateFormatter.parse(tuple.getEntries().get(dateColumn).getValue());
-            return operator.apply(date, CUTOFF_DATE);
+            return dateOperator.apply(date, CUTOFF_DATE);
         } catch (ParseException e) {
             throw new RuntimeException("Unable to parse tuple date ", e);
         }
@@ -101,7 +101,7 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
         return customerTuple.getEntries().get("mktsegment").getValue().equals("BUILDING");
     }
 
-    private enum Operator {
+    private enum DateOperator {
         GREATER_THAN(">") {
             @Override
             public boolean apply(Date d1, Date d2) {
@@ -117,7 +117,7 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
 
         private final String text;
 
-        private Operator(String text) {
+        private DateOperator(String text) {
             this.text = text;
         }
 
