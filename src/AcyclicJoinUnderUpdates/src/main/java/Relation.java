@@ -1,8 +1,6 @@
 package src.main.java;
 
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.sun.istack.internal.Nullable;
 import com.sun.istack.internal.logging.Logger;
@@ -24,7 +22,8 @@ public class Relation implements Serializable {
     private Map<String, Relation> parents;
     private Map<String, Relation> children;
     private RelationStructure structure;
-    private Index index;
+    private Index generalIndex;
+    private Index aliveTuplesIndex;
     //TODO: consider having a Map of foreign keys, key= FK name & value=Relation
 
     /**
@@ -49,13 +48,14 @@ public class Relation implements Serializable {
         if (columnNamesList.size() < 1) {
             throw new RuntimeException("A relation must have at least 1 column. Provided columnNames' size is: " + columnNamesList.size());
         }
-        this.columnNamesSet = ImmutableSet.copyOf(columnNamesList);
+        this.columnNamesSet = new HashSet<>(columnNamesList);
         if (this.columnNamesSet.size() != columnNamesList.size()) {
             throw new RuntimeException("Duplicate column names found: " + columnNamesList);
         }
         this.columnNamesList = columnNamesList;
         //TODO: do we need the tuples map if we have index?
-        index = new Index();
+        generalIndex = new Index();
+        aliveTuplesIndex = new Index();
     }
 
     public boolean insertTuple(Tuple tuple) {
@@ -65,26 +65,27 @@ public class Relation implements Serializable {
             throw new RuntimeException("Column names for tuple and relation do not match. Tuple column names: " + tupleColumnNames + ", relation column names: " + columnNamesSet);
         }
         String pk = tuple.getPrimaryKeyValue();
-        log.info("Inserting Tuple with PK=" + pk + " in Relation " + name);
-        if (tuples.put(pk, tuple) != null) {
-            log.info("Tuple with PK=" + pk + "Already exists.");
-            return false;
-        }
+        tuples.put(pk, tuple);
+        ////log.info("Inserting Tuple with PK=" + pk + " in Relation " + name);
+        /*if (tuples.put(pk, tuple) != null) {
+            throw new RuntimeException("Tuple with PK=" + pk + "Already exists in " + name);
+            //return false;
+        }*/
         tuple.state.setRelationChildCount(children.size());
-        index.insertTuple(tuple);
+        generalIndex.insertTuple(tuple);
         tupleStatusUpdates(this, tuple, Action.INSERT);
         return true;
     }
 
     public boolean deleteTuple(final String primaryKeyValue) {
         requireNonNull(primaryKeyValue);
-        log.info("Deleting Tuple with PK=" + primaryKeyValue + " in Relation " + name);
+        //log.info("Deleting Tuple with PK=" + primaryKeyValue + " in Relation " + name);
         Tuple tuple = tuples.remove(primaryKeyValue);
         if (tuple == null) {
             return false;
         }
         tupleStatusUpdates(this, tuple, Action.DELETE);
-        index.deleteTuple(tuple);
+        generalIndex.deleteTuple(tuple);
         return true;
     }
 
@@ -116,16 +117,24 @@ public class Relation implements Serializable {
         populateFamily(parents, children);
     }
 
+    public Index getGeneralIndex() {
+        return generalIndex;
+    }
+
+    public Index getAliveTuplesIndex() {
+        return aliveTuplesIndex;
+    }
+
     public RelationStructure getStructure() {
         return structure;
     }
 
     public Set<String> getColumnNamesSet() {
-        return ImmutableSet.copyOf(columnNamesSet);
+        return columnNamesSet;
     }
 
     public List<String> getColumnNamesList() {
-        return ImmutableList.copyOf(columnNamesList);
+        return columnNamesList;
     }
 
     public String getName() {
@@ -170,7 +179,7 @@ public class Relation implements Serializable {
      */
     @Nullable
     private Tuple tupleWithForeignKey(String foreignKey, String fKvalue) {
-        List<Tuple> result = index.getTuple(foreignKey, fKvalue);
+        List<Tuple> result = generalIndex.getTuple(foreignKey, fKvalue);
         int size = (result == null) ? 0 : result.size();
         if (size > 1) {
             throw new RuntimeException(size + " tuples found with foreign key. Should be at most 1");
@@ -186,6 +195,9 @@ public class Relation implements Serializable {
      * @param tuple
      */
     private static void tupleStatusUpdates(final Relation relation, Tuple tuple, Action action) {
+        if (relation.structure == RelationStructure.ONLY) {
+            return;
+        }
         if (action == Action.DELETE) {
             if (relation.structure == RelationStructure.INTERMEDIATE) {
                 decrementParentStatus(relation, tuple);
@@ -240,27 +252,34 @@ public class Relation implements Serializable {
     }
 
     private static void updateSelf(final Relation relation, Tuple tuple) {
-        log.info("Updating status for tuple with PK: " + relation.primaryKeyName + "=" + tuple.getPrimaryKeyValue());
+        //log.info("Updating status for tuple with PK: " + relation.primaryKeyName + "=" + tuple.getPrimaryKeyValue());
         if (relation.structure == RelationStructure.LEAF) {
             tuple.state.setAlive();
+            relation.aliveTuplesIndex.insertTuple(tuple);
             return;
         }
-        relation.children.forEach((childName, child) -> {
-            String childPK = child.primaryKeyName;
-            String tValue = tuple.getEntries().get(childPK).getValue();
-            List<Tuple> cTuples = child.index.getTuple(childPK, tValue);
-            if (cTuples == null) {
-                return;
-            }
-            if (cTuples.size() != 1) {
-                log.info("Number of child tuples found " + cTuples.size() + " from " + child.name + " for PK: " + childPK + "=" + tValue);
-                return;
-            }
-            Tuple cTuple = cTuples.get(0);
-            if (cTuple.getPrimaryKeyValue().equals(tValue) && cTuple.isAlive()) {
-                tuple.state.incrementState(relation.name, tuple.getPrimaryKeyValue());
-            }
-        });
+        Set<Map.Entry<String, Relation>> entrySet = relation.getChildren().entrySet();
+        if (entrySet.size() != 1) {
+            throw new RuntimeException("Expected exactly 1 child for " + relation.getName() + ", got " + entrySet.size());
+        }
+
+        Relation child = entrySet.iterator().next().getValue();
+        String childPK = child.primaryKeyName;
+        String tValue = tuple.getEntries().get(childPK).getValue();
+        List<Tuple> cTuples = child.generalIndex.getTuple(childPK, tValue);
+        if (cTuples == null) {
+            return;
+        }
+        if (cTuples.size() != 1) {
+            //log.info("Number of child tuples found " + cTuples.size() + " from " + child.name + " for PK: " + childPK + "=" + tValue);
+            return;
+        }
+        Tuple cTuple = cTuples.get(0);
+        if (cTuple.getPrimaryKeyValue().equals(tValue) && cTuple.isAlive()) {
+            tuple.state.incrementState(relation.name, tuple.getPrimaryKeyValue());
+            //Note: we know that there is one and only one child so we can safely insert the tuple in the alive index
+            relation.aliveTuplesIndex.insertTuple(tuple);
+        }
     }
 
     @Nullable
@@ -270,26 +289,26 @@ public class Relation implements Serializable {
             throw new RuntimeException("Expected 1 and only 1 parent for relation " + relation.name + " with structure " + relation.structure);
         }
         Relation parent = parents.entrySet().iterator().next().getValue();
-        List<Tuple> tuples = parent.index.getTuple(relation.primaryKeyName, tuple.getPrimaryKeyValue());
+        List<Tuple> tuples = parent.generalIndex.getTuple(relation.primaryKeyName, tuple.getPrimaryKeyValue());
         if (tuples == null) {
             return null;
         }
         if (tuples.size() != 1) {
-            log.info("Number of parent tuples found " + tuples.size() + " from " + parent.name + " for FK: " + relation.primaryKeyName + "=" + tuple.getPrimaryKeyValue());
+            //log.info("Number of parent tuples found " + tuples.size() + " from " + parent.name + " for FK: " + relation.primaryKeyName + "=" + tuple.getPrimaryKeyValue());
             return null;
         }
 
         return tuples.get(0);
     }
 
-    private static class Index implements Serializable {
+    public static class Index implements Serializable {
         Map<String, Multimap<String, Tuple>> index;
 
         Index() {
             index = new HashMap<>();
         }
 
-        void insertTuple(Tuple tuple) {
+        private void insertTuple(Tuple tuple) {
             tuple.getEntries().forEach((k, v) -> {
                 Multimap<String, Tuple> entry = index.computeIfAbsent(k, e -> ArrayListMultimap.create());
                 entry.put(v.getValue(), tuple);
@@ -297,14 +316,14 @@ public class Relation implements Serializable {
             });
         }
 
-        void deleteTuple(Tuple tuple) {
+        private void deleteTuple(Tuple tuple) {
             tuple.getEntries().forEach((k, v) -> {
                 index.get(k).remove(v, tuple);
             });
         }
 
         @Nullable
-        List<Tuple> getTuple(String key, String value) {
+        public List<Tuple> getTuple(String key, String value) {
             Multimap<String, Tuple> values = index.get(key);
             return (values == null) ? null : (List<Tuple>) values.get(value);
         }

@@ -36,13 +36,14 @@ public class TupleState implements Serializable {
     public void incrementState(String relationName, String tuplePKValue) {
         checkRelationChildCount();
         if (stateCount == relationChildCount) {
-            throw new RuntimeException("StateCount=relationChildCount=" + stateCount + ". Cannot increment any further.");
+            log.info("StateCount=relationChildCount=" + stateCount + ". Cannot increment any further. For " + relationName + " PK=" + tuplePKValue);
+            return;
         }
         stateCount++;
-        log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + "'s stateCount is updated, stateCount=" + stateCount);
+        //log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + "'s stateCount is updated, stateCount=" + stateCount);
         if (stateCount == relationChildCount) {
             isAlive = true;
-            log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now alive. relationChildCount=" + relationChildCount);
+            //log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now alive. relationChildCount=" + relationChildCount);
         }
     }
 
@@ -53,7 +54,7 @@ public class TupleState implements Serializable {
         }
         stateCount--;
         isAlive = false;
-        log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now NOT alive. relationChildCount=" + relationChildCount + ", stateCount=" + stateCount);
+        //log.info("Tuple with PK=" + tuplePKValue + " in relation " + relationName + " is now NOT alive. relationChildCount=" + relationChildCount + ", stateCount=" + stateCount);
     }
 
     /**

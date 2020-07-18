@@ -1,4 +1,6 @@
 import com.google.common.collect.ImmutableList;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import src.main.java.Relation;
@@ -6,6 +8,7 @@ import src.main.java.SchemaBuilder;
 import src.main.java.Tuple;
 
 import java.util.List;
+import java.util.Properties;
 
 public class FlinkDataService {
     private final List<String> filePaths;
@@ -17,11 +20,15 @@ public class FlinkDataService {
     }
 
     public void fds() throws Exception {
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-        DataStream<Tuple> stream = env.addSource(new FDSSource(filePaths, relations));
-        stream.process(new TPCHQuery3Process(relations));
-        env.execute("FlinkDataService");
+        Properties properties = new Properties();
+        properties.put("jobmanager.heap.size", "2048");
+
+        Configuration configuration = ConfigurationUtils.createConfiguration(properties);
+        final StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironment(1, configuration);
+        environment.setParallelism(1);
+        DataStream<Tuple> stream = environment.addSource(new FDSSource(filePaths, relations));
+        stream.process(new TPCHQuery3Process(relations)).addSink(new FDSSink());
+        environment.execute("FlinkDataService");
     }
 
 }

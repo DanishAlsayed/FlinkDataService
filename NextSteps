@@ -1,7 +1,6 @@
-1- Flink pipeline
-2- SchemaFactory
-3- Algorithm implementation
+In Relation:
+- implement group by and order by
 
-As you go:
-*Logging
-*Cleanup
+If memory runs out:
+- do not insert tuples that are not needed for query 3
+- remove entries map, rely on indexes only

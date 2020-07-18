@@ -16,9 +16,9 @@ public class SchemaBuilder {
      * @return list of relations
      */
     public static List<Relation> query3Schema() {
-        Relation lineItem = new Relation("lineitem", "linenumber", asList("shipdate", "orderkey", "discount", "extendedprice", "suppkey", "quantity", "returnflag", "partkey", "linestatus", "tax", "commitdate", "receiptdate", "shipmode", "linenumber", "shipinstruct", "l_comment"));
-        Relation orders = new Relation("orders", "orderkey", asList("orderdate", "orderkey", "custkey", "orderpriority", "shippriority", "clerk", "orderstatus", "totalprice", "o_comment"));
-        Relation customer = new Relation("customer", "custkey", asList("custkey", "mktsegment", "nationkey", "name", "address", "phone", "acctbal", "c_comment"));
+        Relation lineItem = new Relation("lineitem", "linenumber", asList("shipdate", "orderkey", "discount", "extendedprice", "linenumber"));
+        Relation orders = new Relation("orders", "orderkey", asList("orderdate", "orderkey", "custkey", "orderpriority", "shippriority"));
+        Relation customer = new Relation("customer", "custkey", asList("custkey", "mktsegment"));
 
         //Populating structure
         lineItem.setChildren(singletonMap("orders", orders));

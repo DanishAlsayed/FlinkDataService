@@ -15,7 +15,7 @@ public class FDSSource extends RichSourceFunction<Tuple> {
     private final List<String> filePaths;
     private transient List<BufferedReader> readers;
     private final List<Relation> relations;
-    private final char DELIM = '\t';
+    private final char DELIM = ',';
 
     public FDSSource(final List<String> filePaths, final List<Relation> relations) {
         super();
@@ -54,6 +54,7 @@ public class FDSSource extends RichSourceFunction<Tuple> {
                     } else {
                         closedReaders.add(reader);
                         if (closedReaders.size() == filePaths.size()) {
+                            System.out.println("ALL FILES HAVE BEEN STREAMED");
                             cancel();
                         }
                     }
