@@ -26,7 +26,7 @@ public class FlinkDataService {
         Configuration configuration = ConfigurationUtils.createConfiguration(properties);
         final StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironment(1, configuration);
         environment.setParallelism(1);
-        DataStream<Tuple> stream = environment.addSource(new FDSSource(filePaths, relations));
+        DataStream<Tuple> stream = environment.addSource(new Query3Source(filePaths, relations));
         stream.process(new TPCHQuery3Process(relations)).addSink(new FDSSink());
         environment.execute("FlinkDataService");
     }
