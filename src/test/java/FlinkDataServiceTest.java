@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class FlinkDataServiceTest {
 
@@ -21,7 +22,7 @@ public class FlinkDataServiceTest {
     }
 
     @Test
-    void testGroupBy() {
+    void testGroupByAndSumRevenue() {
         List<Tuple> tuples = new ArrayList<>();
 
         Map<String, String> entries = new HashMap<>();
@@ -52,35 +53,9 @@ public class FlinkDataServiceTest {
         entries.put("revenue", "6.2");
         tuples.add(new Tuple("result", "2", entries));
 
-        groupByAndSumRevenue(tuples).forEach(tuple -> System.out.println(tuple.toString()));
-    }
-
-    private List<Tuple> groupByAndSumRevenue(List<Tuple> resultTuples) {
-        Map<Object, Map<Object, Map<Object, Double>>> resultMap = resultTuples.stream().collect(Collectors.groupingBy(tuple -> {
-            return tuple.getEntries().get("orderkey").getValue();
-        }, Collectors.groupingBy(tuple -> {
-            return tuple.getEntries().get("orderdate").getValue();
-        }, Collectors.groupingBy(tuple -> {
-            return tuple.getEntries().get("shippriority").getValue();
-        }, Collectors.summingDouble(tuple -> {
-            return Double.parseDouble(tuple.getEntries().get("revenue").getValue());
-        })))));
-
-        List<Tuple> resultList = new ArrayList<>();
-        for (Map.Entry<Object, Map<Object, Map<Object, Double>>> entry : resultMap.entrySet()) {
-            String orderkey = (String) entry.getKey();
-            String orderdate = (String) entry.getValue().entrySet().iterator().next().getKey();
-            String shippriority = (String) entry.getValue().entrySet().iterator().next().getValue().entrySet().iterator().next().getKey();
-            double revenue = entry.getValue().entrySet().iterator().next().getValue().entrySet().iterator().next().getValue();
-            Map<String, String> entries = new HashMap<>();
-            entries.put("orderkey", orderkey);
-            entries.put("orderdate", orderdate);
-            entries.put("shippriority", shippriority);
-            entries.put("revenue", String.valueOf(revenue));
-            resultList.add(new Tuple("result", orderkey, entries));
-        }
-        System.out.println(resultMap.size());
-
-        return resultList;
+        List<Tuple> result = TPCHQuery3Process.groupByAndSumRevenue(tuples);
+        assertEquals(2,result.size());
+        assertEquals("10.3",result.get(0).getEntries().get("revenue").getValue());
+        assertEquals("12.3",result.get(1).getEntries().get("revenue").getValue());
     }
 }

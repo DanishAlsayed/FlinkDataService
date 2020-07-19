@@ -8,7 +8,6 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.Arrays.asList;
 import static java.util.Objects.requireNonNull;
 
 public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> implements QueryProcess {
@@ -55,7 +54,7 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
         throw new RuntimeException("Unknown relation name");
     }
 
-    private List<Tuple> groupByAndSumRevenue(List<Tuple> resultTuples) {
+    static List<Tuple> groupByAndSumRevenue(List<Tuple> resultTuples) {
         Map<Object, Map<Object, Map<Object, Double>>> resultMap = resultTuples.stream().collect(Collectors.groupingBy(tuple -> {
             return tuple.getEntries().get("orderkey").getValue();
         }, Collectors.groupingBy(tuple -> {
@@ -79,7 +78,6 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
             entries.put("revenue", String.valueOf(revenue));
             resultList.add(new Tuple("result", orderkey, entries));
         }
-        System.out.println(resultMap.size());
 
         return resultList;
     }
