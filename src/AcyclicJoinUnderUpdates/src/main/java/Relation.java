@@ -66,11 +66,6 @@ public class Relation implements Serializable {
         }
         String pk = tuple.getPrimaryKeyValue();
         tuples.put(pk, tuple);
-        ////log.info("Inserting Tuple with PK=" + pk + " in Relation " + name);
-        /*if (tuples.put(pk, tuple) != null) {
-            throw new RuntimeException("Tuple with PK=" + pk + "Already exists in " + name);
-            //return false;
-        }*/
         tuple.state.setRelationChildCount(children.size());
         generalIndex.insertTuple(tuple);
         tupleStatusUpdates(this, tuple, Action.INSERT);
@@ -175,20 +170,6 @@ public class Relation implements Serializable {
     //Note: getters and setters not used in private methods
 
     /**
-     * returns null if tuple doesn't exist
-     */
-    @Nullable
-    private Tuple tupleWithForeignKey(String foreignKey, String fKvalue) {
-        List<Tuple> result = generalIndex.getTuple(foreignKey, fKvalue);
-        int size = (result == null) ? 0 : result.size();
-        if (size > 1) {
-            throw new RuntimeException(size + " tuples found with foreign key. Should be at most 1");
-        }
-
-        return size == 0 ? null : result.get(0);
-    }
-
-    /**
      * This is STRICTLY for a relation tree of the structure ROOT -> INTERMEDIATE -> LEAF. Corresponding to lineintem, orders and customer tables only in the TPC-H schema.
      *
      * @param relation
@@ -256,6 +237,7 @@ public class Relation implements Serializable {
         if (relation.structure == RelationStructure.LEAF) {
             tuple.state.setAlive();
             relation.aliveTuplesIndex.insertTuple(tuple);
+            relation.generalIndex.deleteTuple(tuple);
             return;
         }
         Set<Map.Entry<String, Relation>> entrySet = relation.getChildren().entrySet();
@@ -279,6 +261,7 @@ public class Relation implements Serializable {
             tuple.state.incrementState(relation.name, tuple.getPrimaryKeyValue());
             //Note: we know that there is one and only one child so we can safely insert the tuple in the alive index
             relation.aliveTuplesIndex.insertTuple(tuple);
+            relation.generalIndex.deleteTuple(tuple);
         }
     }
 
@@ -307,6 +290,14 @@ public class Relation implements Serializable {
         Index() {
             index = new HashMap<>();
         }
+
+        public Map<String, Multimap<String, Tuple>> getIndex() {
+            return index;
+        }
+
+        /*public List<Tuple> getIndexTuples() {
+            List<>
+        }*/
 
         private void insertTuple(Tuple tuple) {
             tuple.getEntries().forEach((k, v) -> {

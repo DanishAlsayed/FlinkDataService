@@ -21,7 +21,7 @@ public class FlinkDataService {
 
     public void fds() throws Exception {
         Properties properties = new Properties();
-        properties.put("jobmanager.heap.size", "2048");
+        properties.put("jobmanager.heap.size", "4096");
 
         Configuration configuration = ConfigurationUtils.createConfiguration(properties);
         final StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironment(1, configuration);

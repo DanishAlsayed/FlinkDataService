@@ -1,18 +1,22 @@
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import src.main.java.Relation;
+import src.main.java.Tuple;
 
-public class FDSSink implements SinkFunction<Relation> {
+import java.util.List;
+
+public class FDSSink implements SinkFunction<List<Tuple>> {
 
     FDSSink() {
     }
 
     @Override
-    public void invoke(Relation value, Context context) throws Exception {
-        if (value.getTuples().size() == 0)
+    public void invoke(List<Tuple> result, Context context) {
+        if (result.size() == 0)
             return;
-        System.out.println("RESULT: ");
-        value.getTuples().forEach((k, v) -> {
-            System.out.println(k + "==>" + v.toString());
+        System.out.println("RESULT: " + result.size());
+        result.forEach(tuple -> {
+            System.out.println(tuple.getPrimaryKeyValue() + "==>" + tuple.toString());
         });
+        System.out.println("__________________________________");
     }
 }

@@ -89,14 +89,16 @@ public class Tuple implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Tuple tuple = (Tuple) o;
-        return Objects.equals(state, tuple.state) &&
-                Objects.equals(entries, tuple.entries) &&
-                Objects.equals(columnNames, tuple.columnNames);
+        return state.equals(tuple.state) &&
+                entries.equals(tuple.entries) &&
+                columnNames.equals(tuple.columnNames) &&
+                primaryKeyValue.equals(tuple.primaryKeyValue) &&
+                relationName.equals(tuple.relationName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(state, entries, columnNames);
+        return Objects.hash(state, entries, columnNames, primaryKeyValue, relationName);
     }
 
     @Override

@@ -5,29 +5,18 @@ import src.main.java.Relation;
 import src.main.java.Tuple;
 
 import javax.annotation.Nullable;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
 import static java.util.Objects.requireNonNull;
 
-public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implements QueryProcess {
+public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> implements QueryProcess {
 
     private final Map<String, Relation> relationsMap;
-    private final Date CUTOFF_DATE;
-    private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
 
     public TPCHQuery3Process(List<Relation> relationsMap) {
         this.relationsMap = populateRelationsMap(relationsMap);
-        try {
-            this.CUTOFF_DATE = dateFormatter.parse("1995-03-15");
-        } catch (ParseException e) {
-            throw new RuntimeException("Unable to parse date ", e);
-        }
     }
 
     @Override
@@ -36,82 +25,131 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
     }
 
     @Override
-    public void processElement(Tuple tuple, Context context, Collector<Relation> collector) {
-        //TODO:
-        // Insert tuple in its relation
-        // Calculate update
-        // Collect update
+    public void processElement(Tuple tuple, Context context, Collector<List<Tuple>> collector) {
         relationsMap.get(tuple.getRelationName()).insertTuple(tuple);
-        //TODO: do not collect if result is empty
-        collector.collect(calculateResult(tuple));
+
+        List<Tuple> result = calculateResult(tuple);
+        if (result != null) {
+            collector.collect(result);
+        }
     }
 
+    @Nullable
     @Override
-    public Relation calculateResult(Tuple tuple) {
-        Relation result = getResultRelation();
+    public List<Tuple> calculateResult(Tuple tuple) {
         String relationName = tuple.getRelationName();
-        Relation relation = relationsMap.get(relationName);
+        List<Tuple> resultTuples;
         if (relationName.equals("lineitem")) {
-            Tuple resultTuple = processLineItemTuple(tuple, relation);
-            if (resultTuple == null) {
-                return result;
-            }
-            result.insertTuple(resultTuple);
-            return result;
+            resultTuples = processLineItemTuple(tuple);
+            return (resultTuples == null) ? null : groupByAndSumRevenue(resultTuples);
         }
         if (relationName.equals("orders")) {
-            Tuple resultTuple = processOrdersTuple(tuple, relation);
-            if (resultTuple == null) {
-                return result;
+            resultTuples = processOrdersTuple(tuple);
+            return (resultTuples == null) ? null : groupByAndSumRevenue(resultTuples);
+        }
+        if (relationName.equals("customer")) {
+            resultTuples = processCustomerTuple(tuple);
+            return (resultTuples == null) ? null : groupByAndSumRevenue(resultTuples);
+        }
+
+        throw new RuntimeException("Unknown relation name");
+    }
+
+    private List<Tuple> groupByAndSumRevenue(List<Tuple> resultTuples) {
+        Map<Object, Map<Object, Map<Object, Double>>> resultMap = resultTuples.stream().collect(Collectors.groupingBy(tuple -> {
+            return tuple.getEntries().get("orderkey").getValue();
+        }, Collectors.groupingBy(tuple -> {
+            return tuple.getEntries().get("orderdate").getValue();
+        }, Collectors.groupingBy(tuple -> {
+            return tuple.getEntries().get("shippriority").getValue();
+        }, Collectors.summingDouble(tuple -> {
+            return Double.parseDouble(tuple.getEntries().get("revenue").getValue());
+        })))));
+
+        List<Tuple> resultList = new ArrayList<>();
+        for (Map.Entry<Object, Map<Object, Map<Object, Double>>> entry : resultMap.entrySet()) {
+            String orderkey = (String) entry.getKey();
+            String orderdate = (String) entry.getValue().entrySet().iterator().next().getKey();
+            String shippriority = (String) entry.getValue().entrySet().iterator().next().getValue().entrySet().iterator().next().getKey();
+            double revenue = entry.getValue().entrySet().iterator().next().getValue().entrySet().iterator().next().getValue();
+            Map<String, String> entries = new HashMap<>();
+            entries.put("orderkey", orderkey);
+            entries.put("orderdate", orderdate);
+            entries.put("shippriority", shippriority);
+            entries.put("revenue", String.valueOf(revenue));
+            resultList.add(new Tuple("result", orderkey, entries));
+        }
+        System.out.println(resultMap.size());
+
+        return resultList;
+    }
+
+    @Nullable
+    private List<Tuple> processCustomerTuple(Tuple insertedTuple) {
+        List<Tuple> ordersLiveTuples = relationsMap.get("orders").getAliveTuplesIndex().getTuple("custkey", insertedTuple.getPrimaryKeyValue());
+        if (ordersLiveTuples == null || ordersLiveTuples.size() == 0) {
+            return null;
+        }
+        List<Tuple> lineitemLiveTuples = new ArrayList<>();
+        Relation.Index lineItemLiveIndex = relationsMap.get("lineitem").getAliveTuplesIndex();
+        for (Tuple orderTuple : ordersLiveTuples) {
+            List<Tuple> lineitemTuples = lineItemLiveIndex.getTuple("orderkey", orderTuple.getPrimaryKeyValue());
+            if (lineitemTuples == null || lineitemTuples.size() == 0) {
+                continue;
             }
-            result.insertTuple(resultTuple);
-            return result;
+            lineitemLiveTuples.addAll(lineitemTuples);
+        }
+
+        if (lineitemLiveTuples.size() == 0) {
+            return null;
+        }
+
+        return getResultTuples(lineitemLiveTuples);
+    }
+
+    @Nullable
+    private List<Tuple> processOrdersTuple(Tuple insertedTuple) {
+        String orderkey = insertedTuple.getPrimaryKeyValue();
+        List<Tuple> lineitemLiveTuples = getLineitemLiveTuples(orderkey);
+        if (lineitemLiveTuples == null || lineitemLiveTuples.size() == 0) {
+            return null;
+        }
+
+        return getResultTuples(lineitemLiveTuples);
+    }
+
+    @Nullable
+    private List<Tuple> processLineItemTuple(Tuple insertedTuple) {
+        String orderkey = insertedTuple.getEntries().get("orderkey").getValue();
+        List<Tuple> lineitemLiveTuples = getLineitemLiveTuples(orderkey);
+        if (lineitemLiveTuples == null || lineitemLiveTuples.size() == 0) {
+            return null;
+        }
+
+        return getResultTuples(lineitemLiveTuples);
+    }
+
+    private List<Tuple> getResultTuples(List<Tuple> lineitemLiveTuples) {
+        List<Tuple> result = new ArrayList<>();
+        for (Tuple tuple : lineitemLiveTuples) {
+            Map<String, String> entries = new HashMap<>();
+            String orderkey = tuple.getEntries().get("orderkey").getValue();
+            entries.put("orderkey", orderkey);
+            //TODO: fix revenue calculation, do it after groupby
+            double price = Double.parseDouble(tuple.getEntries().get("extendedprice").getValue());
+            double discount = Double.parseDouble(tuple.getEntries().get("discount").getValue());
+            entries.put("revenue", String.valueOf(price * (1 - discount)));
+            Relation orders = relationsMap.get("orders");
+            entries.put("orderdate", orders.getTuples().get(orderkey).getEntries().get("orderdate").getValue());
+            entries.put("shippriority", orders.getTuples().get(orderkey).getEntries().get("shippriority").getValue());
+            result.add(new Tuple("result", orderkey, entries));
         }
 
         return result;
     }
 
-    @Nullable
-    private Tuple processOrdersTuple(Tuple tuple, Relation relation) {
-        Relation.Index index = relation.getAliveTuplesIndex();
-        List<Tuple> tuples = index.getTuple("custkey", tuple.getEntries().get("custkey").getValue());
-        if (tuples == null || tuples.size() == 0) {
-            return null;
-        }
-        Map<String, String> entries = new HashMap<>();
-        String orderkey = tuple.getEntries().get("orderkey").getValue();
-        entries.put("orderkey", orderkey);
-        Relation lineitem = relationsMap.get("lineitem");
-        Relation.Index lineitemIndex = lineitem.getAliveTuplesIndex();
-        List<Tuple> lineitemTuples = lineitemIndex.getTuple("orderkey", orderkey);
-        if (lineitemTuples == null || lineitemTuples.size() == 0) {
-            return null;
-        }
-        entries.put("orderkey", orderkey);
-        entries.put("revenue", String.valueOf(calculateRevenue(lineitemTuples)));
-        entries.put("orderdate", tuple.getEntries().get("orderdate").getValue());
-        entries.put("shippriority", tuple.getEntries().get("shippriority").getValue());
-
-        return new Tuple("result", orderkey, entries);
-    }
-
-    @Nullable
-    private Tuple processLineItemTuple(Tuple tuple, Relation relation) {
-        Relation.Index index = relation.getAliveTuplesIndex();
-        List<Tuple> tuples = index.getTuple("orderkey", tuple.getEntries().get("orderkey").getValue());
-        if (tuples == null || tuples.size() == 0) {
-            return null;
-        }
-
-        Map<String, String> entries = new HashMap<>();
-        String orderkey = tuple.getEntries().get("orderkey").getValue();
-        entries.put("orderkey", orderkey);
-        entries.put("revenue", String.valueOf(calculateRevenue(tuples)));
-        Relation orders = relationsMap.get("orders");
-        entries.put("orderdate", orders.getTuples().get(orderkey).getEntries().get("orderdate").getValue());
-        entries.put("shippriority", orders.getTuples().get(orderkey).getEntries().get("shippriority").getValue());
-
-        return new Tuple("result", orderkey, entries);
+    private List<Tuple> getLineitemLiveTuples(String orderkey) {
+        return relationsMap.get("lineitem").getAliveTuplesIndex().getTuple("orderkey", orderkey);
     }
 
     private double calculateRevenue(List<Tuple> lineitemTuples) {
@@ -122,13 +160,6 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, Relation> implemen
             sum += price * (1 - discount);
         }
         return sum;
-    }
-
-    private Relation getResultRelation() {
-        Relation result = new Relation("result", "orderkey", asList("orderkey", "revenue", "orderdate", "shippriority"));
-        result.setParents(new HashMap<>());
-        result.setChildren(new HashMap<>());
-        return result;
     }
 
     private Map<String, Relation> populateRelationsMap(final List<Relation> relations) {

@@ -20,6 +20,7 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
     private final char DELIM = ',';
     private final Date CUTOFF_DATE;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
+    private int lineitemCounter = 0;
 
     public TPCHQuery3Source(final List<String> filePaths, final List<Relation> relations) {
         super();
@@ -51,19 +52,25 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
     public void run(SourceContext<Tuple> sourceContext) {
         this.context = sourceContext;
         readers = makeReaders();
+        Iterator<BufferedReader> readerIterator = readers.iterator();
         Set<BufferedReader> closedReaders = new HashSet<>();
         AtomicInteger counter = new AtomicInteger();
         while (run) {
             readers.forEach(reader -> {
                 try {
                     String line = reader.readLine();
-                    Tuple tuple = lineToTuple(line, counter.get() % filePaths.size());
-                    if (tuple != null && isValidTuple(tuple)) {
-                        System.out.println("SOURCE->" + tuple.toString());
-                        sourceContext.collect(tuple);
+                    if (line != null) {
+                        Tuple tuple = lineToTuple(line, counter.get() % filePaths.size());
+                        //Note: ensure the isValidTuple check is done if _trimmed2.csv date files are not being used
+                        if (tuple != null && isValidTuple(tuple)) {
+                            //System.out.println("SOURCE->" + tuple.toString());
+                            sourceContext.collect(tuple);
+                        }
                     } else {
+                        //readers.remove(reader);
                         closedReaders.add(reader);
-                        if (closedReaders.size() == filePaths.size()) {
+                        //TODO: remove the -1, we should process all of the lineitem rows, its the biggest file so will be the last to close
+                        if (closedReaders.size() == filePaths.size() - 1) {
                             System.out.println("ALL FILES HAVE BEEN STREAMED");
                             cancel();
                         }
@@ -86,6 +93,10 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
     public Tuple lineToTuple(final String line, int index) {
         if (line == null) {
             return null;
+        }
+        if (index == 0) {
+            lineitemCounter++;
+            //System.out.println(lineitemCounter);
         }
         Relation relation = relations.get(index);
         String[] values = line.split(String.valueOf(DELIM));
