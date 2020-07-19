@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class Query3Source extends RichSourceFunction<Tuple> implements QuerySource {
+public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements QuerySource {
     private volatile boolean run = false;
     private SourceContext<Tuple> context;
     private final List<String> filePaths;
@@ -21,7 +21,7 @@ public class Query3Source extends RichSourceFunction<Tuple> implements QuerySour
     private final Date CUTOFF_DATE;
     private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd");
 
-    public Query3Source(final List<String> filePaths, final List<Relation> relations) {
+    public TPCHQuery3Source(final List<String> filePaths, final List<Relation> relations) {
         super();
         if (filePaths == null || filePaths.isEmpty()) {
             throw new RuntimeException("filePaths cannot be null or empty");
