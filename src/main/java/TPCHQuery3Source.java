@@ -70,7 +70,7 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
                         //readers.remove(reader);
                         closedReaders.add(reader);
                         //TODO: remove the -1, we should process all of the lineitem rows, its the biggest file so will be the last to close
-                        if (closedReaders.size() == filePaths.size() - 1) {
+                        if (closedReaders.size() == filePaths.size()) {
                             System.out.println("ALL FILES HAVE BEEN STREAMED");
                             cancel();
                         }
@@ -98,6 +98,7 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
             lineitemCounter++;
             //System.out.println(lineitemCounter);
         }
+
         Relation relation = relations.get(index);
         String[] values = line.split(String.valueOf(DELIM));
         Map<String, String> entries = makeEntries(relation, values);
@@ -146,6 +147,11 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
     }
 
     private String getPrimaryKeyValue(Relation relation, String[] values) {
+        if (relation.getName().equals("lineitem")) {
+            int linenumberIndex = relation.getColumnNamesList().indexOf(relation.getPrimaryKeyName());
+            int orderkeyIndex = relation.getColumnNamesList().indexOf("orderkey");
+            return values[orderkeyIndex] + values[linenumberIndex];
+        }
         int pkIndex = relation.getColumnNamesList().indexOf(relation.getPrimaryKeyName());
         return values[pkIndex];
     }

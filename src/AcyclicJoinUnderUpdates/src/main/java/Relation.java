@@ -5,6 +5,7 @@ import com.google.common.collect.Multimap;
 import com.sun.istack.internal.Nullable;
 import com.sun.istack.internal.logging.Logger;
 
+import static java.util.Collections.singletonList;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 import java.io.Serializable;
@@ -80,7 +81,7 @@ public class Relation implements Serializable {
             return false;
         }
         tupleStatusUpdates(this, tuple, Action.DELETE);
-        generalIndex.deleteTuple(tuple);
+        //generalIndex.deleteTuple(tuple);
         return true;
     }
 
@@ -195,11 +196,14 @@ public class Relation implements Serializable {
             updateSelf(relation, tuple);
 
             if (relation.structure == RelationStructure.INTERMEDIATE) {
-                updateParent(relation, tuple);
+                List<Tuple> parentTuples = retrieveParentTuples(relation, singletonList(tuple));
+                updateParent(relation, parentTuples);
             } else if (relation.structure == RelationStructure.LEAF) {
                 Relation relation1 = relation;
+                List<Tuple> tuples = singletonList(tuple);
                 for (int i = 0; i < 2; i++) {
-                    relation1 = updateParent(relation1, tuple);
+                    tuples = retrieveParentTuples(relation1, tuples);
+                    relation1 = updateParent(relation1, tuples);
                     if (relation1 == null) {
                         break;
                     }
@@ -211,24 +215,21 @@ public class Relation implements Serializable {
     }
 
     private static Relation decrementParentStatus(final Relation relation, Tuple tuple) {
-        Tuple parentTuple = retrieveParentTuple(relation, tuple);
-        if (parentTuple == null) {
-            return null;
-        }
+        List<Tuple> parentTuples = retrieveParentTuples(relation, singletonList(tuple));
         Relation parent = relation.parents.entrySet().iterator().next().getValue();
-        parentTuple.state.decrementState(parent.name, parentTuple.getPrimaryKeyValue());
+        parentTuples.forEach(parentTuple -> parentTuple.state.decrementState(parent.name, parentTuple.getPrimaryKeyValue()));
         return parent;
     }
 
     @Nullable
-    private static Relation updateParent(final Relation relation, Tuple tuple) {
-        Tuple parentTuple = retrieveParentTuple(relation, tuple);
-        if (parentTuple == null) {
+    private static Relation updateParent(final Relation relation, List<Tuple> parentTuples) {
+        if (parentTuples == null) {
             return null;
         }
         //Note: we know that there is only 1 parent
         Relation parent = relation.parents.entrySet().iterator().next().getValue();
-        updateSelf(parent, parentTuple);
+        parentTuples.forEach(parentTuple -> updateSelf(parent, parentTuple));
+
         return parent;
     }
 
@@ -237,7 +238,7 @@ public class Relation implements Serializable {
         if (relation.structure == RelationStructure.LEAF) {
             tuple.state.setAlive();
             relation.aliveTuplesIndex.insertTuple(tuple);
-            relation.generalIndex.deleteTuple(tuple);
+            //relation.generalIndex.deleteTuple(tuple);
             return;
         }
         Set<Map.Entry<String, Relation>> entrySet = relation.getChildren().entrySet();
@@ -261,27 +262,31 @@ public class Relation implements Serializable {
             tuple.state.incrementState(relation.name, tuple.getPrimaryKeyValue());
             //Note: we know that there is one and only one child so we can safely insert the tuple in the alive index
             relation.aliveTuplesIndex.insertTuple(tuple);
-            relation.generalIndex.deleteTuple(tuple);
+            //relation.generalIndex.deleteTuple(tuple);
         }
     }
 
     @Nullable
-    private static Tuple retrieveParentTuple(Relation relation, Tuple tuple) {
+    private static List<Tuple> retrieveParentTuples(Relation relation, List<Tuple> tuples) {
         Map<String, Relation> parents = relation.parents;
         if (parents.size() != 1) {
             throw new RuntimeException("Expected 1 and only 1 parent for relation " + relation.name + " with structure " + relation.structure);
         }
         Relation parent = parents.entrySet().iterator().next().getValue();
-        List<Tuple> tuples = parent.generalIndex.getTuple(relation.primaryKeyName, tuple.getPrimaryKeyValue());
-        if (tuples == null) {
-            return null;
-        }
-        if (tuples.size() != 1) {
-            //log.info("Number of parent tuples found " + tuples.size() + " from " + parent.name + " for FK: " + relation.primaryKeyName + "=" + tuple.getPrimaryKeyValue());
-            return null;
-        }
 
-        return tuples.get(0);
+        List<Tuple> parentTuples = new ArrayList<>();
+        tuples.forEach(tuple -> parentTuples.addAll(parent.generalIndex.getTuple(relation.primaryKeyName, tuple.getPrimaryKeyValue())));
+        /*if (parentTuples == null) {
+            return null;
+        }
+        //TODO: this check prevents from updating live status if there are multiple tuples in the parent with the same PK of the child
+        // which is possible as that PK is FK in the parent and thus can be repeated
+        if (tuples.size() != 1) {
+            //log.info("Number of parent tuples found " + tuples.size() + " from " + parent.name + " for FK: " + relation.primaryKeyName + "=" + tuples.getPrimaryKeyValue());
+            return null;
+        }*/
+
+        return parentTuples;
     }
 
     public static class Index implements Serializable {
@@ -300,10 +305,14 @@ public class Relation implements Serializable {
         }*/
 
         private void insertTuple(Tuple tuple) {
-            tuple.getEntries().forEach((k, v) -> {
-                Multimap<String, Tuple> entry = index.computeIfAbsent(k, e -> ArrayListMultimap.create());
-                entry.put(v.getValue(), tuple);
-                index.put(k, entry);
+            tuple.getEntries().forEach((columnName, columnValue) -> {
+                Multimap<String, Tuple> entry = index.get(columnName);//index.computeIfAbsent(columnName, e -> ArrayListMultimap.create());
+                if (entry == null) {
+                    entry = ArrayListMultimap.create();
+                }
+                entry.put(columnValue.getValue(), tuple);
+                //This leads to having one mulitmap per column name
+                index.put(columnName, entry);
             });
         }
 
@@ -313,10 +322,9 @@ public class Relation implements Serializable {
             });
         }
 
-        @Nullable
         public List<Tuple> getTuple(String key, String value) {
             Multimap<String, Tuple> values = index.get(key);
-            return (values == null) ? null : (List<Tuple>) values.get(value);
+            return (values == null) ? new ArrayList<Tuple>() : (List<Tuple>) values.get(value);
         }
     }
 

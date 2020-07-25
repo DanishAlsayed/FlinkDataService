@@ -119,6 +119,7 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
     @Nullable
     private List<Tuple> processLineItemTuple(Tuple insertedTuple) {
         String orderkey = insertedTuple.getEntries().get("orderkey").getValue();
+        //TODO: only use the tuple with PK as the insertedTuple
         List<Tuple> lineitemLiveTuples = getLineitemLiveTuples(orderkey);
         if (lineitemLiveTuples == null || lineitemLiveTuples.size() == 0) {
             return null;
@@ -136,7 +137,8 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
             //TODO: fix revenue calculation, do it after groupby
             double price = Double.parseDouble(tuple.getEntries().get("extendedprice").getValue());
             double discount = Double.parseDouble(tuple.getEntries().get("discount").getValue());
-            entries.put("revenue", String.valueOf(price * (1 - discount)));
+            double revenue = price * (1 - discount);
+            entries.put("revenue", String.valueOf(revenue));
             Relation orders = relationsMap.get("orders");
             entries.put("orderdate", orders.getTuples().get(orderkey).getEntries().get("orderdate").getValue());
             entries.put("shippriority", orders.getTuples().get(orderkey).getEntries().get("shippriority").getValue());
