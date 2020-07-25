@@ -1,4 +1,5 @@
 import com.google.common.collect.ImmutableList;
+import org.apache.commons.io.FileUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import src.main.java.Relation;
@@ -6,6 +7,8 @@ import src.main.java.Tuple;
 
 import javax.annotation.Nullable;
 import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -52,15 +55,43 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
     public void run(SourceContext<Tuple> sourceContext) {
         this.context = sourceContext;
         readers = makeReaders();
-        Iterator<BufferedReader> readerIterator = readers.iterator();
         Set<BufferedReader> closedReaders = new HashSet<>();
         AtomicInteger counter = new AtomicInteger();
+        /*List<String> file1Lines;
+        List<String> file2Lines;
+        List<String> file3Lines;
+        try {
+            file1Lines = FileUtils.readLines(new File(filePaths.get(0)), StandardCharsets.ISO_8859_1);
+            file2Lines = FileUtils.readLines(new File(filePaths.get(1)), StandardCharsets.ISO_8859_1);
+            file3Lines = FileUtils.readLines(new File(filePaths.get(2)), StandardCharsets.ISO_8859_1);
+        } catch (Exception e) {
+            throw new RuntimeException("Error in reading file", e);
+        }
+        Iterator<String> file1Iterator = file1Lines.iterator();
+        Iterator<String> file2Iterator = file2Lines.iterator();
+        Iterator<String> file3Iterator = file3Lines.iterator();
+        List<Iterator<String>> files = new ArrayList<>();
+        files.add(file1Iterator);
+        files.add(file2Iterator);
+        files.add(file3Iterator);*/
+
         while (run) {
             readers.forEach(reader -> {
+                /*int index = counter.get() % filePaths.size();
+                Iterator<String> iterator = files.get(index);
+                if (iterator.hasNext()) {
+                    String line = iterator.next();
+                    Tuple tuple = lineToTuple(line, index);
+                    if (tuple != null && isValidTuple(tuple)) {
+                        sourceContext.collect(tuple);
+                    }
+                }
+                counter.getAndIncrement();*/
                 try {
                     String line = reader.readLine();
                     if (line != null) {
-                        Tuple tuple = lineToTuple(line, counter.get() % filePaths.size());
+                        int index = counter.get() % filePaths.size();
+                        Tuple tuple = lineToTuple(line, index);
                         //Note: ensure the isValidTuple check is done if _trimmed2.csv date files are not being used
                         if (tuple != null && isValidTuple(tuple)) {
                             //System.out.println("SOURCE->" + tuple.toString());
@@ -75,6 +106,8 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
                             cancel();
                         }
                     }
+                    //Marking line String for garbage collection
+                    line = null;
                     counter.getAndIncrement();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -96,7 +129,11 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         }
         if (index == 0) {
             lineitemCounter++;
-            //System.out.println(lineitemCounter);
+            if (lineitemCounter == 1000000 || lineitemCounter == 1500000 || lineitemCounter == 2000000 || lineitemCounter == 2500000 || lineitemCounter == 2750000) {
+                System.out.println("Garbage collector called");
+                System.gc();
+            }
+            System.out.println(lineitemCounter);
         }
 
         Relation relation = relations.get(index);
@@ -110,8 +147,8 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         final List<BufferedReader> readers = new ArrayList<>();
         filePaths.forEach(path -> {
             try {
-                readers.add(new BufferedReader(new FileReader(new File(path))));
-            } catch (FileNotFoundException e) {
+                readers.add(new BufferedReader(new FileReader(new File(path), StandardCharsets.ISO_8859_1)));
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         });
@@ -150,7 +187,10 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         if (relation.getName().equals("lineitem")) {
             int linenumberIndex = relation.getColumnNamesList().indexOf(relation.getPrimaryKeyName());
             int orderkeyIndex = relation.getColumnNamesList().indexOf("orderkey");
-            return values[orderkeyIndex] + values[linenumberIndex];
+            StringBuilder pk = new StringBuilder();
+            pk.append(values[orderkeyIndex]);
+            pk.append(values[linenumberIndex]);
+            return pk.toString();
         }
         int pkIndex = relation.getColumnNamesList().indexOf(relation.getPrimaryKeyName());
         return values[pkIndex];
@@ -165,7 +205,7 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
             throw new RuntimeException("# of columns for relation " + relation.getName() + " must be equal to the # of values." + count + " != " + columnNames.size());
         }
         for (int i = 0; i < count; i++) {
-            entries.put(columnNames.get(i), values[i]);
+            entries.put(columnNames.get(i).intern(), values[i].intern());
         }
         return entries;
     }

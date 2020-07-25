@@ -124,8 +124,11 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
         if (lineitemLiveTuples == null || lineitemLiveTuples.size() == 0) {
             return null;
         }
-
-        return getResultTuples(lineitemLiveTuples);
+        List<Tuple> result = getResultTuples(lineitemLiveTuples);
+        Relation lineitem = relationsMap.get("lineitem");
+        //optimization to save memory
+        result.forEach(tuple -> lineitem.deleteTuple(tuple.getPrimaryKeyValue()));
+        return result;
     }
 
     private List<Tuple> getResultTuples(List<Tuple> lineitemLiveTuples) {
@@ -150,16 +153,6 @@ public class TPCHQuery3Process extends ProcessFunction<Tuple, List<Tuple>> imple
 
     private List<Tuple> getLineitemLiveTuples(String orderkey) {
         return relationsMap.get("lineitem").getAliveTuplesIndex().getTuple("orderkey", orderkey);
-    }
-
-    private double calculateRevenue(List<Tuple> lineitemTuples) {
-        double sum = 0;
-        for (Tuple tuple : lineitemTuples) {
-            double price = Double.parseDouble(tuple.getEntries().get("extendedprice").getValue());
-            double discount = Double.parseDouble(tuple.getEntries().get("discount").getValue());
-            sum += price * (1 - discount);
-        }
-        return sum;
     }
 
     private Map<String, Relation> populateRelationsMap(final List<Relation> relations) {

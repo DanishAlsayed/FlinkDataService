@@ -2,8 +2,8 @@ package src.main.java;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.sun.istack.internal.Nullable;
-import com.sun.istack.internal.logging.Logger;
+import org.jetbrains.annotations.Nullable;
+//import com.sun.istack.internal.logging.Logger;
 
 import static java.util.Collections.singletonList;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
@@ -14,7 +14,7 @@ import java.util.*;
 import static java.util.Objects.requireNonNull;
 
 public class Relation implements Serializable {
-    private static Logger log = Logger.getLogger(Relation.class);
+    //private static Logger log = Logger.getLogger(Relation.class);
     private final String name;
     private final Set<String> columnNamesSet;
     private final List<String> columnNamesList;
@@ -49,7 +49,11 @@ public class Relation implements Serializable {
         if (columnNamesList.size() < 1) {
             throw new RuntimeException("A relation must have at least 1 column. Provided columnNames' size is: " + columnNamesList.size());
         }
-        this.columnNamesSet = new HashSet<>(columnNamesList);
+        //this.columnNamesSet = new HashSet<>(columnNamesList);
+        this.columnNamesSet = new HashSet<>();
+        columnNamesList.forEach(c_name -> {
+            columnNamesSet.add(c_name.intern());
+        });
         if (this.columnNamesSet.size() != columnNamesList.size()) {
             throw new RuntimeException("Duplicate column names found: " + columnNamesList);
         }
@@ -81,7 +85,8 @@ public class Relation implements Serializable {
             return false;
         }
         tupleStatusUpdates(this, tuple, Action.DELETE);
-        //generalIndex.deleteTuple(tuple);
+        generalIndex.deleteTuple(tuple);
+        aliveTuplesIndex.deleteTuple(tuple);
         return true;
     }
 

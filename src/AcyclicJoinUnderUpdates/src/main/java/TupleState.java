@@ -1,12 +1,12 @@
 package src.main.java;
 
-import com.sun.istack.internal.logging.Logger;
+//import com.sun.istack.internal.logging.Logger;
 
 import java.io.Serializable;
 import java.util.Objects;
 
 public class TupleState implements Serializable {
-    private static Logger log = Logger.getLogger(TupleState.class);
+    //private static Logger log = Logger.getLogger(TupleState.class);
     private boolean isAlive = false;
     private int stateCount = 0;
     private int relationChildCount = -1;
@@ -36,7 +36,7 @@ public class TupleState implements Serializable {
     public void incrementState(String relationName, String tuplePKValue) {
         checkRelationChildCount();
         if (stateCount == relationChildCount) {
-            log.info("StateCount=relationChildCount=" + stateCount + ". Cannot increment any further. For " + relationName + " PK=" + tuplePKValue);
+            //log.info("StateCount=relationChildCount=" + stateCount + ". Cannot increment any further. For " + relationName + " PK=" + tuplePKValue);
             return;
         }
         stateCount++;

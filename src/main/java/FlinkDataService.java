@@ -3,12 +3,14 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.time.Time;
 import src.main.java.Relation;
 import src.main.java.SchemaBuilder;
 import src.main.java.Tuple;
 
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 public class FlinkDataService {
     private final List<String> filePaths;
@@ -20,11 +22,7 @@ public class FlinkDataService {
     }
 
     public void fds() throws Exception {
-        Properties properties = new Properties();
-        properties.put("jobmanager.heap.size", "4096");
-
-        Configuration configuration = ConfigurationUtils.createConfiguration(properties);
-        final StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironment(1, configuration);
+        final StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironment(1);
         environment.setParallelism(1);
         DataStream<Tuple> stream = environment.addSource(new TPCHQuery3Source(filePaths, relations));
         stream.process(new TPCHQuery3Process(relations)).addSink(new FDSSink());
