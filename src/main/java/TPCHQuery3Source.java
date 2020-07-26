@@ -57,57 +57,23 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         readers = makeReaders();
         Set<BufferedReader> closedReaders = new HashSet<>();
         AtomicInteger counter = new AtomicInteger();
-        /*List<String> file1Lines;
-        List<String> file2Lines;
-        List<String> file3Lines;
-        try {
-            file1Lines = FileUtils.readLines(new File(filePaths.get(0)), StandardCharsets.ISO_8859_1);
-            file2Lines = FileUtils.readLines(new File(filePaths.get(1)), StandardCharsets.ISO_8859_1);
-            file3Lines = FileUtils.readLines(new File(filePaths.get(2)), StandardCharsets.ISO_8859_1);
-        } catch (Exception e) {
-            throw new RuntimeException("Error in reading file", e);
-        }
-        Iterator<String> file1Iterator = file1Lines.iterator();
-        Iterator<String> file2Iterator = file2Lines.iterator();
-        Iterator<String> file3Iterator = file3Lines.iterator();
-        List<Iterator<String>> files = new ArrayList<>();
-        files.add(file1Iterator);
-        files.add(file2Iterator);
-        files.add(file3Iterator);*/
-
         while (run) {
             readers.forEach(reader -> {
-                /*int index = counter.get() % filePaths.size();
-                Iterator<String> iterator = files.get(index);
-                if (iterator.hasNext()) {
-                    String line = iterator.next();
-                    Tuple tuple = lineToTuple(line, index);
-                    if (tuple != null && isValidTuple(tuple)) {
-                        sourceContext.collect(tuple);
-                    }
-                }
-                counter.getAndIncrement();*/
                 try {
                     String line = reader.readLine();
                     if (line != null) {
                         int index = counter.get() % filePaths.size();
                         Tuple tuple = lineToTuple(line, index);
-                        //Note: ensure the isValidTuple check is done if _trimmed2.csv date files are not being used
                         if (tuple != null && isValidTuple(tuple)) {
-                            //System.out.println("SOURCE->" + tuple.toString());
                             sourceContext.collect(tuple);
                         }
                     } else {
-                        //readers.remove(reader);
                         closedReaders.add(reader);
-                        //TODO: remove the -1, we should process all of the lineitem rows, its the biggest file so will be the last to close
                         if (closedReaders.size() == filePaths.size()) {
                             System.out.println("ALL FILES HAVE BEEN STREAMED");
                             cancel();
                         }
                     }
-                    //Marking line String for garbage collection
-                    line = null;
                     counter.getAndIncrement();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -130,10 +96,8 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         if (index == 0) {
             lineitemCounter++;
             if (lineitemCounter == 1000000 || lineitemCounter == 1500000 || lineitemCounter == 2000000 || lineitemCounter == 2500000 || lineitemCounter == 2750000) {
-                System.out.println("Garbage collector called");
                 System.gc();
             }
-            System.out.println(lineitemCounter);
         }
 
         Relation relation = relations.get(index);

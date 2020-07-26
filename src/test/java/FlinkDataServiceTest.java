@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,7 +17,7 @@ public class FlinkDataServiceTest {
                 "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/AcyclicJoinUnderUpdates/src/main/resources/data/orders_trimmed.csv",
                 "/home/danishalsayed/Desktop/FlinkProject/FlinkDataService/src/AcyclicJoinUnderUpdates/src/main/resources/data/customer_trimmed.csv"
         ));
-        fds.fds();
+        fds.execute();
     }
 
     @Test
