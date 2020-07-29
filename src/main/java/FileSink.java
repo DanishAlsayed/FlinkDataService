@@ -8,10 +8,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 
-public class FDSSink extends RichSinkFunction<List<Tuple>> {
+public class FileSink extends RichSinkFunction<List<Tuple>> {
     private transient BufferedWriter writer;
 
-    FDSSink() {
+    FileSink() {
     }
 
     @Override
@@ -34,7 +34,6 @@ public class FDSSink extends RichSinkFunction<List<Tuple>> {
                 e.printStackTrace();
             }
         });
-        writer.write("__________________________________\n");
     }
 
     @Override
