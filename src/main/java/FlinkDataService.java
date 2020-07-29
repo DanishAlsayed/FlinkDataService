@@ -28,8 +28,9 @@ public class FlinkDataService {
     public void execute() throws Exception {
         final StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
         environment.setParallelism(1);
-        DataStream<Tuple> stream = environment.addSource(new TPCHQuery3Source(filePaths, relations));
-        stream.process(new TPCHQuery3Process(relations)).addSink(new FDSSink());
+        environment.addSource(new TPCHQuery3Source(filePaths, relations))
+                .filter(new TPCHQuery3Filter())
+                .process(new TPCHQuery3Process(relations)).addSink(new FDSSink());
         environment.execute("FlinkDataService");
     }
 
