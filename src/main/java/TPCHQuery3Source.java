@@ -101,7 +101,7 @@ public class TPCHQuery3Source extends RichSourceFunction<Tuple> implements Query
         final List<BufferedReader> readers = new ArrayList<>();
         filePaths.forEach(path -> {
             try {
-                readers.add(new BufferedReader(new FileReader(new File(path), StandardCharsets.ISO_8859_1)));
+                readers.add(new BufferedReader(new FileReader(new File(path))));//, StandardCharsets.ISO_8859_1)));
             } catch (IOException e) {
                 e.printStackTrace();
             }

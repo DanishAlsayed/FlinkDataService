@@ -10,16 +10,19 @@ import java.util.List;
 
 public class FileSink extends RichSinkFunction<List<Tuple>> {
     private transient BufferedWriter writer;
+    private final String workingDirectory;
 
-    FileSink() {
+    FileSink(final String workingDirectory) {
+        this.workingDirectory = workingDirectory;
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        File resultFile = new File("result");
+        String resultPath = workingDirectory + "result";
+        File resultFile = new File(resultPath);
         assert !resultFile.exists() || resultFile.delete();
-        writer = new BufferedWriter(new FileWriter("result", true));
+        writer = new BufferedWriter(new FileWriter(resultPath, true));
     }
 
     @Override
